@@ -14,6 +14,7 @@ export interface PodParticipant {
   uid: string;
   joinedAt: Timestamp;
   votedConfirm: boolean; // FR-18~FR-19: 확정 투표 동의 여부
+  votedExtend: boolean; // FR-23~FR-24: 출발시간 임박 시 연장 동의 여부 (awaitingExtension이 true일 때만 의미 있음)
 }
 
 /**
@@ -32,6 +33,7 @@ export interface PodDoc {
   status: PodStatus;
   participants: PodParticipant[];
   escrowTotal: number; // FR-20: 확정 시 차감된 마일리지 합계 보관
+  awaitingExtension: boolean; // FR-23: 출발시간 도달 & 미확정 상태 → 연장 동의 팝업 대상인지
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

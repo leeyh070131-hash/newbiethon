@@ -281,3 +281,37 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - `409`: 팟이 이미 `recruiting`이 아님, 또는 확정 처리 시점에 다른 참가자의 잔액이 부족해진 경우(드문 동시성 케이스).
 - `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟/본인 프로필 없음.
 - FR-22: 확정(`confirmed`) 이후 노쇼가 발생해도 이미 차감된 마일리지를 되돌리는 API는 없다(정책일 뿐, 별도 엔드포인트 없음).
+
+## GET /api/cron/check-departures
+
+### Request
+헤더: `Authorization: Bearer <CRON_SECRET>` (Vercel Cron이 자동으로 붙임 — 사람이 직접 호출하는 API 아님)
+
+### Response
+```json
+{ "flaggedCount": "number — 이번 호출에서 새로 연장 동의 대상으로 표시된 팟 수" }
+```
+
+### 비고
+- FR-23: `status === "recruiting"`이고 `awaitingExtension === false`인 팟 중 `departureTime`이 지난 것을 찾아 `awaitingExtension: true`로 바꾸고 참가자 전원의 `votedExtend`를 초기화한다.
+- `vercel.json`의 `crons` 설정(5분 주기)으로 호출된다. `401`: `CRON_SECRET` 불일치.
+
+## POST /api/pods/:id/extend-vote
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{ "agree": "boolean" }
+```
+
+### Response
+```json
+{ "pod": "투표 반영 후 pod 최신 상태" }
+```
+
+### 비고
+- 팟이 `awaitingExtension === true`일 때만 호출 가능(`409` — 그 외엔 "지금은 연장 동의 투표 대상이 아닙니다").
+- FR-25/AC-9: `agree: false`를 보낸 참가자가 한 명이라도 있으면 그 즉시 `status`가 `dissolved`로 바뀐다(다른 참가자 응답을 기다리지 않음).
+- FR-24/AC-8: 참가자 전원이 `agree: true`를 보내면 `departureTime`이 30분 뒤로 연장되고 `awaitingExtension`이 `false`로 돌아가며, 다음 라운드를 위해 전원의 `votedExtend`가 초기화된다(`votedConfirm`은 그대로 유지).
+- FR-26: 이 시점까지는 마일리지 차감이 없었으므로(미확정 상태) 폐지되어도 환불 처리가 필요 없다.
+- `400`: 본인이 참가자가 아니거나 `agree`가 boolean이 아님. `404`: 팟이 없음.

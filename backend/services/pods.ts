@@ -99,8 +99,9 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     minParticipants: validated.minParticipants,
     pricePerPerson: validated.pricePerPerson,
     status: "recruiting",
-    participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false }],
+    participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false }],
     escrowTotal: 0,
+    awaitingExtension: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -171,7 +172,7 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
 
     const updated: PodDoc = {
       ...pod,
-      participants: [...pod.participants, { uid, joinedAt: Timestamp.now(), votedConfirm: false }],
+      participants: [...pod.participants, { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false }],
       updatedAt: Timestamp.now(),
     };
     tx.set(ref, updated);
@@ -298,5 +299,82 @@ export async function voteConfirm(uid: string, podId: string): Promise<PodDoc> {
     };
     tx.set(podRef, updatedPod);
     return updatedPod;
+  });
+}
+
+/**
+ * FR-23: 출발시간에 도달했지만 아직 확정되지 않은 팟을 찾아 연장 동의 대상으로 표시한다.
+ * 스케줄러(app/api/cron/check-departures)가 주기적으로 호출한다. status/awaitingExtension은
+ * 단일 필드 조건이라 복합 인덱스 없이 조회하고, 출발시간 비교는 메모리에서 한다(MVP 규모 기준 충분).
+ */
+export async function flagDepartedPodsForExtension(): Promise<number> {
+  const db = getAdminDb();
+  const snapshot = await db.collection(COLLECTIONS.pods).where("status", "==", "recruiting").get();
+  const now = Timestamp.now();
+
+  const targets = snapshot.docs.filter((doc) => {
+    const pod = doc.data() as PodDoc;
+    return !pod.awaitingExtension && pod.departureTime.toMillis() <= now.toMillis();
+  });
+  if (targets.length === 0) return 0;
+
+  const batch = db.batch();
+  for (const doc of targets) {
+    const pod = doc.data() as PodDoc;
+    batch.update(doc.ref, {
+      awaitingExtension: true,
+      participants: pod.participants.map((p) => ({ ...p, votedExtend: false })),
+      updatedAt: now,
+    });
+  }
+  await batch.commit();
+  return targets.length;
+}
+
+/**
+ * FR-24~FR-26/AC-8/AC-9: 연장 동의 투표. 한 명이라도 거부하면 즉시 폐지(FR-25),
+ * 전원 동의하면 출발시간을 30분 연장하고 다음 라운드를 위해 votedExtend를 초기화한다(FR-24).
+ */
+export async function voteExtend(uid: string, podId: string, agree: boolean): Promise<PodDoc> {
+  const db = getAdminDb();
+  const ref = db.collection(COLLECTIONS.pods).doc(podId);
+
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    const pod = snapshot.data() as PodDoc;
+
+    if (!pod.awaitingExtension) {
+      throw new ConflictError("지금은 연장 동의 투표 대상이 아닙니다.");
+    }
+    if (!pod.participants.some((p) => p.uid === uid)) {
+      throw new ValidationError("이 팟의 참가자가 아닙니다.");
+    }
+
+    const now = Timestamp.now();
+
+    if (!agree) {
+      // FR-25/AC-9: 한 명이라도 거부하면 즉시 폐지. 마일리지 차감 전이라 환불 처리도 없다(FR-26).
+      const dissolved: PodDoc = { ...pod, status: "dissolved", awaitingExtension: false, updatedAt: now };
+      tx.set(ref, dissolved);
+      return dissolved;
+    }
+
+    const updatedParticipants = pod.participants.map((p) => (p.uid === uid ? { ...p, votedExtend: true } : p));
+    const allAgreed = updatedParticipants.every((p) => p.votedExtend);
+
+    const updated: PodDoc = allAgreed
+      ? {
+          // FR-24/AC-8: 전원 동의 → 30분 연장, 다음 라운드를 위해 연장 투표 상태 초기화
+          ...pod,
+          departureTime: Timestamp.fromMillis(pod.departureTime.toMillis() + 30 * 60 * 1000),
+          awaitingExtension: false,
+          participants: updatedParticipants.map((p) => ({ ...p, votedExtend: false })),
+          updatedAt: now,
+        }
+      : { ...pod, participants: updatedParticipants, updatedAt: now };
+
+    tx.set(ref, updated);
+    return updated;
   });
 }

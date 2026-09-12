@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-F (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-G (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -50,11 +50,12 @@
 - 의존: Phase 1-D, 1-E 완료 필요 (완료됨)
 
 ## Phase 1-G. 출발시간 임박 처리
-- Backend: 출발시간 도달 감지(Vercel Cron 등 스케줄러), 연장 동의 API, 전원동의시 30분 연장 / 미동의시 자동 폐지 (FR-23~FR-26)
-- Frontend: 연장 동의 팝업 UI
-- 예정 API: `POST /api/pods/:id/extend-vote`
-- 검증: AC-8, AC-9
-- 의존: Phase 1-F 완료 필요
+- Backend: ✅ 출발시간 도달 감지(Vercel Cron, `app/api/cron/check-departures`), 연장 동의 API, 전원동의시 30분 연장 / 한명이라도 거부시 즉시 자동 폐지 (FR-23~FR-26) — `backend/services/pods.ts`의 `flagDepartedPodsForExtension`/`voteExtend`
+  - ⚠️ Vercel Hobby 플랜의 크론 실행 주기 제한 가능성 — README "출발시간 임박 처리 크론" 참고, 배포 후 실제 동작 확인 필요
+- Frontend: ⬜ 연장 동의 팝업 UI — Codex 담당, 미착수
+- 예정 API: `POST /api/pods/:id/extend-vote`, `GET /api/cron/check-departures`(크론 전용) (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-8, AC-9 (프론트 완료 후 end-to-end 확인 가능)
+- 의존: Phase 1-F 완료 필요 (완료됨)
 
 ## Phase 1-H. 팟 해지 & 정산 & 이력
 - Backend: 호스트 해지 API → 에스크로 전액 호스트 지급 (FR-27, FR-28), 해지/폐지 이력 기록·조회 (FR-29)
