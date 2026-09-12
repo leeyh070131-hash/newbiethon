@@ -1,20 +1,8 @@
 // 얇은 라우팅 셸. 실제 로직은 backend/services/profile.ts 에 있다.
 import { requireAuth } from "@/backend/lib/auth";
-import { toErrorResponse, ValidationError } from "@/backend/lib/http-errors";
+import { toErrorResponse } from "@/backend/lib/http-errors";
+import { parseJsonBody } from "@/backend/lib/http";
 import { createProfile, getProfile, updateProfile } from "@/backend/services/profile";
-
-async function parseJsonBody(request: Request): Promise<Record<string, unknown>> {
-  try {
-    const body = await request.json();
-    if (typeof body !== "object" || body === null || Array.isArray(body)) {
-      throw new ValidationError("요청 본문은 JSON 객체여야 합니다.");
-    }
-    return body as Record<string, unknown>;
-  } catch (error) {
-    if (error instanceof ValidationError) throw error;
-    throw new ValidationError("유효한 JSON 본문이 필요합니다.");
-  }
-}
 
 export async function GET(request: Request) {
   try {

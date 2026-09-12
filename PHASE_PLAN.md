@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-B (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-C (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -24,10 +24,11 @@
 - 검증: 재수정 전까지 정보 불변 확인 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-C. 팟 생성 & 메인 목록
-- Backend: 팟 생성 API(최소인원≤최대인원 검증, 동성 자동 설정) (FR-7~FR-10), 목록 API(위치기반 정렬 / 거부시 최신순) (FR-14, FR-14a)
-- Frontend: 팟 생성 폼(정류장/역 선택), 메인화면 목록 UI + 위치 권한 요청
-- 예정 API: `POST /api/pods`, `GET /api/pods`
-- 검증: AC-1, AC-2, AC-13
+- Backend: ✅ 팟 생성 API(최소인원≤최대인원 검증, 실존 정류장 검증, 동성 자동 설정) (FR-7~FR-10), 목록 API(위치기반 정렬 / 거부시 최신순) (FR-14, FR-14a) — `backend/services/pods.ts`
+  - ⚠️ Firestore 복합 인덱스(`firestore.indexes.json`)와 보안 규칙(`firestore.rules`)을 배포해야 `GET /api/pods`(위치 없을 때)가 동작함 — `firebase deploy --only firestore:rules,firestore:indexes` (README 참고)
+- Frontend: ⬜ 팟 생성 폼(정류장/역 선택), 메인화면 목록 UI + 위치 권한 요청 — Codex 담당, 미착수
+- 예정 API: `POST /api/pods`, `GET /api/pods` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-1, AC-2, AC-13 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-D. 팟 참가/탈퇴
 - Backend: 참가 API(동성 필터, 정원마감) (FR-11, FR-12), 탈퇴 API(확정 전 참가자/호스트 탈퇴, 호스트 탈퇴시 자동 폐지) (FR-13, FR-13a)

@@ -105,3 +105,64 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ### 비고
 - FR-3/FR-4: name/gender/bankAccount는 본인이 이 엔드포인트로 직접 호출하지 않는 한 절대 바뀌지 않는다 — 토큰의 uid로만 본인 문서를 수정하므로 다른 경로로는 변경 불가.
 - 404: 아직 프로필이 없음(POST 먼저 필요). 400: 본문이 비어있거나 형식 오류.
+
+## POST /api/pods
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{
+  "departureStationId": "string — /api/stations의 id",
+  "arrivalStationId": "string — /api/stations의 id, departureStationId와 달라야 함",
+  "departureTime": "string — ISO 8601 날짜/시간",
+  "maxParticipants": "number — 모집인원(최대 정원), 1 이상 정수",
+  "minParticipants": "number — 참여최소인원, 1 이상 정수, maxParticipants 이하",
+  "pricePerPerson": "number — 인당예상가격, 0보다 큼"
+}
+```
+
+### Response
+`201`
+```json
+{
+  "pod": {
+    "id": "string",
+    "hostUid": "string",
+    "gender": "\"male\" | \"female\" — 호스트 등록 성별로 자동 설정 (FR-9)",
+    "departureStationId": "string",
+    "arrivalStationId": "string",
+    "departureTime": "Firestore Timestamp",
+    "maxParticipants": "number",
+    "minParticipants": "number",
+    "pricePerPerson": "number",
+    "status": "\"recruiting\"",
+    "participants": [{ "uid": "string", "joinedAt": "Timestamp", "votedConfirm": "boolean" }],
+    "escrowTotal": "number — 생성 시 0",
+    "createdAt": "Timestamp",
+    "updatedAt": "Timestamp"
+  }
+}
+```
+
+### 비고
+- FR-7: 생성자가 자동으로 호스트 겸 첫 참가자가 된다(참가자 배열에 본인 포함, votedConfirm은 아직 false).
+- FR-10/AC-2: `minParticipants > maxParticipants`이면 400.
+- 400: `departureStationId`/`arrivalStationId`가 `/api/stations`에 없는 id이거나 서로 같은 경우도 포함.
+- 404: 프로필을 아직 생성하지 않은 사용자 (`POST /api/profile` 먼저 필요, gender를 여기서 가져오므로 FR-9의 전제조건).
+
+## GET /api/pods
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+쿼리: `?lat=<number>&lng=<number>` (선택 — 위치 미제공/거부 시 생략)
+
+### Response
+```json
+{ "pods": ["POST /api/pods 응답의 pod와 동일한 형태 배열, status가 \"recruiting\"인 것만"] }
+```
+
+### 비고
+- FR-14: `lat`/`lng`가 둘 다 유효한 숫자면 각 팟의 출발지 정류장과의 직선거리(haversine) 오름차순으로 정렬.
+- FR-14a: `lat`/`lng`가 없거나 숫자가 아니면 최신 생성순(`createdAt` desc)으로 정렬.
+- 확정(`confirmed`)·폐지(`dissolved`)·해지(`closed`) 상태 팟은 포함되지 않는다.
+- 이 쿼리는 Firestore 복합 인덱스가 필요하다 — `firestore.indexes.json` 참고, `firebase deploy --only firestore:indexes`로 배포.

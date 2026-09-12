@@ -17,3 +17,11 @@ npm run seed:stations
 ```
 
 `.env.local`에 Firebase Admin 환경변수(`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`)가 필요하다. 현재는 지하철역만 채워진다 — `backend/data/README.md` 참고.
+
+## Firestore 규칙/인덱스 배포
+
+모든 Firestore 접근은 `backend/`(Firebase Admin SDK)를 통해서만 이뤄지므로 `firestore.rules`는 클라이언트 직접 접근을 전부 차단한다. `GET /api/pods`(위치 미제공 시 최신순 정렬)는 복합 인덱스가 필요하다.
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
