@@ -2,7 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { COLLECTIONS } from "../models/collections";
 import { getAdminDb } from "../lib/firebase-admin";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/http-errors";
-import type { Gender, UserDoc } from "../models/user";
+import type { Gender, PendingNotice, UserDoc } from "../models/user";
 
 const VALID_GENDERS: Gender[] = ["male", "female"];
 
@@ -55,6 +55,7 @@ export async function createProfile(uid: string, input: Record<string, unknown>)
     gender,
     bankAccount: bankAccount.trim(),
     mileageBalance: 0,
+    pendingNotice: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -98,12 +99,40 @@ export async function updateProfile(uid: string, input: Record<string, unknown>)
   return { ...(existing.data() as UserDoc), ...updates };
 }
 
-export interface ClientUser extends Omit<UserDoc, "createdAt" | "updatedAt"> {
+/**
+ * 확인 전까지 떠 있어야 할 알림(예: 추방됨)을 지운다. 본인 알림만 지울 수 있도록
+ * 다른 라우트와 마찬가지로 토큰의 uid로만 본인 문서를 수정한다.
+ */
+export async function dismissNotice(uid: string): Promise<UserDoc> {
+  const ref = getAdminDb().collection(COLLECTIONS.users).doc(uid);
+  const existing = await ref.get();
+  if (!existing.exists) {
+    throw new NotFoundError("프로필이 아직 생성되지 않았습니다.");
+  }
+  const updates: Partial<UserDoc> = { pendingNotice: null, updatedAt: Timestamp.now() };
+  await ref.update(updates);
+  return { ...(existing.data() as UserDoc), ...updates };
+}
+
+export interface ClientPendingNotice extends Omit<PendingNotice, "createdAt"> {
+  createdAt: string;
+}
+
+export interface ClientUser extends Omit<UserDoc, "createdAt" | "updatedAt" | "pendingNotice"> {
   createdAt: string;
   updatedAt: string;
+  pendingNotice: ClientPendingNotice | null;
 }
 
 /** API 응답 변환: Firestore Timestamp를 ISO 8601 문자열로 바꾼다. */
 export function toClientUser(user: UserDoc): ClientUser {
-  return { ...user, createdAt: user.createdAt.toDate().toISOString(), updatedAt: user.updatedAt.toDate().toISOString() };
+  return {
+    ...user,
+    createdAt: user.createdAt.toDate().toISOString(),
+    updatedAt: user.updatedAt.toDate().toISOString(),
+    // pendingNotice는 이 필드가 생기기 전에 만들어진 기존 유저 문서엔 아예 없을 수 있다.
+    pendingNotice: user.pendingNotice
+      ? { ...user.pendingNotice, createdAt: user.pendingNotice.createdAt.toDate().toISOString() }
+      : null,
+  };
 }

@@ -56,6 +56,9 @@ export async function updateProfile(input: Partial<{ name: string; gender: "male
   return (await request<{ profile: ClientUser }>("/api/profile", { method: "PATCH", body: JSON.stringify(input) }))
     .profile;
 }
+export async function dismissNotice(): Promise<ClientUser> {
+  return (await request<{ profile: ClientUser }>("/api/profile/notice", { method: "DELETE" })).profile;
+}
 
 export async function listPods(location?: { lat: number; lng: number }): Promise<ClientPod[]> {
   const query = location ? `?lat=${location.lat}&lng=${location.lng}` : "";
@@ -79,6 +82,11 @@ export async function joinPod(id: string): Promise<ClientPod> {
 }
 export async function leavePod(id: string): Promise<ClientPod> {
   return (await request<{ pod: ClientPod }>(`/api/pods/${id}/leave`, { method: "DELETE" })).pod;
+}
+export async function kickParticipant(id: string, targetUid: string): Promise<ClientPod> {
+  return (
+    await request<{ pod: ClientPod }>(`/api/pods/${id}/kick`, { method: "POST", body: JSON.stringify({ targetUid }) })
+  ).pod;
 }
 export async function voteConfirm(id: string): Promise<ClientPod> {
   return (await request<{ pod: ClientPod }>(`/api/pods/${id}/vote`, { method: "POST" })).pod;

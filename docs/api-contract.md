@@ -62,6 +62,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "gender": "\"male\" | \"female\"",
     "bankAccount": "string",
     "mileageBalance": "number",
+    "pendingNotice": "{ type: \"kicked\", podId: string, createdAt: string (ISO 8601) } | null — 확인 전 알림 (2026-09-12 추가, 아래 비고 참고)",
     "createdAt": "string (ISO 8601)",
     "updatedAt": "string (ISO 8601)"
   }
@@ -70,6 +71,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 
 ### 비고
 - 401: 토큰 없음/무효. 404: 아직 프로필을 생성하지 않음(`POST /api/profile` 필요).
+- (2026-09-12 추가) `pendingNotice`는 본인이 확인하기 전까지 떠 있는 알림이다. 현재는 호스트에게 추방당했을 때(`type: "kicked"`)만 채워진다. 프론트는 이 값이 있으면 팝업으로 안내하고 `DELETE /api/profile/notice`로 지운다. 한 번에 하나만 보관하므로(MVP 규모) 확인 전에 또 추방당하면 이전 알림은 덮어써진다.
 
 ## POST /api/profile
 
@@ -109,6 +111,21 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - (2026-09-12 결정 변경 — 이전: name/gender도 PATCH로 수정 가능) `name`/`gender`는 `POST /api/profile`(최초 인증) 시점에만 정해지고 이후 영구히 고정된다. 요청 본문에 `name` 또는 `gender`가 있으면 값이 기존과 같더라도 `400`("이름과 성별은 최초 인증 후에는 변경할 수 없습니다.")으로 거부된다.
 - 404: 아직 프로필이 없음(POST 먼저 필요). 400: 본문이 비어있거나 형식 오류.
 
+## DELETE /api/profile/notice
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+본문 없음
+
+### Response
+```json
+{ "profile": "GET /api/profile과 동일한 형태, pendingNotice가 null로 반영됨" }
+```
+
+### 비고
+- (2026-09-12 추가) `pendingNotice`를 확인했다는 뜻으로 지운다. 프론트가 팝업을 보여준 뒤 호출한다. 알림이 이미 없어도 에러 없이 그대로 `null`을 반환한다.
+- 404: 아직 프로필이 없음.
+
 ## POST /api/pods
 
 ### Request
@@ -142,6 +159,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "status": "\"recruiting\"",
     "participants": [{ "uid": "string", "name": "string", "joinedAt": "string (ISO 8601)", "votedConfirm": "boolean", "votedExtend": "boolean", "votedClose": "boolean — FR-27 도착 확인 동의 여부, confirmed 상태일 때만 의미 있음" }],
     "participantUids": "string[] — participants의 uid만 뽑은 배열(내부 조회용, 프론트는 참고만)",
+    "leftUids": "string[] — 자진 탈퇴했거나 추방당한 uid 목록, 생성 시 []. 여기 포함된 uid는 이 팟에 다시 참가할 수 없다 (2026-09-12 추가)",
     "escrowTotal": "number — 생성 시 0",
     "awaitingExtension": "boolean — 생성 시 false",
     "createdAt": "string (ISO 8601)",
@@ -202,7 +220,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ### 비고
 - FR-11/AC-3: 본인 등록 성별이 팟의 `gender`와 다르면 `403`.
 - FR-12/AC-4: `participants.length`가 `maxParticipants`에 도달했으면 `409`("모집 마감된 팟입니다").
-- `409`: 이미 참가한 팟에 다시 참가 시도, 또는 팟 상태가 `recruiting`이 아님(이미 확정/폐지/해지).
+- `409`: 이미 참가한 팟에 다시 참가 시도, 또는 팟 상태가 `recruiting`이 아님(이미 확정/폐지/해지). (2026-09-12 추가) 또는 본인이 `leftUids`에 있음(이 팟에서 자진 탈퇴했거나 추방당한 적 있음) — "이 팟에서 나간 이력이 있어 다시 참가할 수 없습니다."
 - `404`: 팟이 없음, 또는 본인 프로필이 없음(`POST /api/profile` 먼저 필요).
 - 동시 참가로 정원 초과가 나지 않도록 서버에서 Firestore 트랜잭션으로 처리한다.
 - (2026-09-12 추가) 참가로 인원이 늘어나므로 `pricePerPerson`이 늘어난 인원 기준으로 자동 재계산된다(`totalPrice`는 불변).
@@ -224,6 +242,28 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-13a/AC-5a: 탈퇴하는 사람이 호스트(`hostUid`)면 팟 전체가 `dissolved`로 바뀐다(참가자 목록 자체는 기록으로 남지만 팟은 종료됨).
 - `409`: 팟이 이미 `recruiting`이 아님(확정/폐지/해지된 팟은 이 엔드포인트로 탈퇴 불가).
 - `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟이 없음.
+- (2026-09-12 추가) 호스트가 아닌 본인이 탈퇴하면 `leftUids`에 추가되어 이 팟에는 다시 참가할 수 없다(`POST /join` 비고 참고).
+
+## POST /api/pods/:id/kick
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{ "targetUid": "string — 추방할 참가자의 uid" }
+```
+
+### Response
+```json
+{ "pod": "추방 반영 후 pod 최신 상태 (참가자 목록에서 targetUid 제거됨)" }
+```
+
+### 비고
+- (2026-09-12 추가) 호스트가 아직 확정 동의(`votedConfirm`)를 하지 않은 참가자를 강제로 내보낸다. "준비완료"(확정 동의)를 이미 마친 참가자는 추방할 수 없다.
+- `403`: 호출자가 이 팟의 호스트가 아님. `400`: `targetUid` 누락, 호스트 자기 자신을 대상으로 지정, 또는 대상이 이 팟의 참가자가 아님.
+- `409`: 팟이 `recruiting`이 아니거나, 대상이 이미 확정 동의를 마쳤음("이미 확정 동의를 마친 참가자는 추방할 수 없습니다.").
+- `404`: 팟이 없음.
+- 탈퇴(`DELETE /leave`)와 동일하게 남은 참가자 전원의 `votedConfirm`이 초기화되고 `pricePerPerson`도 재계산되며, 대상은 `leftUids`에 추가되어 이 팟에 다시 참가할 수 없다.
+- 대상 유저 문서(`users/{targetUid}`)의 `pendingNotice`에 `{ type: "kicked", podId, createdAt }`를 기록한다 — 대상은 `GET /api/profile` 폴링으로 이를 확인하고 팝업을 띄운 뒤 `DELETE /api/profile/notice`로 지운다.
 
 ## POST /api/mileage/coupon
 

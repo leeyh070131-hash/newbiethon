@@ -38,6 +38,8 @@ export interface PodDoc {
   // 직접 쿼리할 수 없어서, "이 uid가 참가자인 팟 목록"(FR-29 이력 조회)을
   // array-contains로 조회하기 위한 용도로만 존재한다. participants 갱신 시 항상 함께 갱신한다.
   participantUids: string[];
+  // 자진 탈퇴했거나 호스트에게 추방당한 uid 목록. 한 번 여기 들어간 uid는 이 팟에 다시 참가할 수 없다.
+  leftUids: string[];
   escrowTotal: number; // FR-20: 확정 시 차감된 마일리지 합계 보관
   awaitingExtension: boolean; // FR-23: 출발시간 도달 & 미확정 상태 → 연장 동의 팝업 대상인지
   createdAt: Timestamp;

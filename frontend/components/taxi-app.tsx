@@ -10,8 +10,9 @@ import {
 import Modal from "./modal";
 import { firebaseConfigured, googleLogin, googleLogout, onAuthChange } from "@/frontend/lib/firebase";
 import {
-  ApiError, chargeMileage, createPod, createProfile, getHistory, getMileageTransactions, getMyActivePods,
-  getPod, getProfile, getStations, joinPod, leavePod, listPods, redeemCoupon, updateProfile, voteClose,
+  ApiError, chargeMileage, createPod, createProfile, dismissNotice, getHistory, getMileageTransactions,
+  getMyActivePods, getPod, getProfile, getStations, joinPod, kickParticipant, leavePod, listPods,
+  redeemCoupon, updateProfile, voteClose,
   voteConfirm, voteExtend,
 } from "@/frontend/lib/api";
 import type { ClientPod } from "@/backend/services/pods";
@@ -27,7 +28,7 @@ const transactionLabel: Record<ClientMileageTransaction["type"], string> = {
 };
 
 type Tab = "explore" | "mine" | "wallet" | "profile";
-type Overlay = "login" | "profile" | "create" | "charge" | "guide" | "detail" | "extend" | null;
+type Overlay = "login" | "profile" | "create" | "charge" | "guide" | "detail" | "extend" | "kicked" | null;
 type Gender = "female" | "male";
 
 const labels: Record<ClientPod["status"], string> = {
@@ -274,12 +275,27 @@ export default function TaxiApp() {
     }
   }, [due, overlay, selectedId]);
 
+  // 추방당했다는 알림(pendingNotice)은 프로필 폴링(8초)으로 들어온다. 다른 화면을 보고
+  // 있지 않거나, 마침 추방당한 그 팟 상세를 보고 있었다면 바로 팝업으로 띄운다.
+  const kickedNotice = profile?.pendingNotice?.type === "kicked" ? profile.pendingNotice : null;
+  useEffect(() => {
+    if (kickedNotice && (!overlay || (overlay === "detail" && selectedId === kickedNotice.podId))) {
+      setOverlay("kicked");
+      setError("");
+    }
+  }, [kickedNotice, overlay, selectedId]);
+
   function open(next: Overlay) {
     setError("");
     setOverlay(next);
   }
   function close() {
     if (overlay === "extend" && selected) setDismissedExtension(`${selected.id}-${selected.departureTime}`);
+    if (overlay === "kicked") {
+      dismissNotice()
+        .then(setProfile)
+        .catch(() => {});
+    }
     setOverlay(null);
     setError("");
   }
@@ -462,6 +478,8 @@ export default function TaxiApp() {
       ? "택시팟, 이렇게 이용해요"
       : overlay === "extend"
       ? "조금 더 기다려 볼까요?"
+      : overlay === "kicked"
+      ? "팟에서 나가게 되었어요"
       : "함께 갈 팟";
 
   return (
@@ -1241,6 +1259,21 @@ export default function TaxiApp() {
               </div>
             </div>
           )}
+          {overlay === "kicked" && kickedNotice && (
+            <div className="login-content">
+              <div className="login-illustration">
+                <LogOut size={35} />
+              </div>
+              <p>
+                호스트가 회원님을 팟에서 내보냈어요.
+                <br />
+                이 팟에는 다시 참가할 수 없어요.
+              </p>
+              <button className="primary full" onClick={close}>
+                확인했어요
+              </button>
+            </div>
+          )}
           {(overlay === "detail" || overlay === "extend") && selected && (
             <div className="detail-content">
               <div className="detail-status">
@@ -1279,6 +1312,9 @@ export default function TaxiApp() {
                     selected.status === "closed" ? true : selected.status === "confirmed" ? m.votedClose : m.votedConfirm;
                   const label =
                     selected.status === "closed" ? "정산 완료" : selected.status === "confirmed" ? (done ? "도착 확인" : "대기 중") : done ? "확정 동의" : "대기 중";
+                  // 호스트는 모집중 상태에서, 아직 확정 동의(준비완료)를 안 한 참가자만 추방할 수 있다.
+                  const canKick =
+                    selected.status === "recruiting" && authUser?.uid === selected.hostUid && m.uid !== selected.hostUid && !done;
                   return (
                     <li key={m.uid}>
                       <span className="avatar mini">{m.name.slice(0, 1)}</span>
@@ -1288,8 +1324,29 @@ export default function TaxiApp() {
                         <small>{m.uid === selected.hostUid ? "호스트" : "참가자"}</small>
                       </span>
                       <span className={done ? "vote-done" : "muted"}>
-                        {label}
-                        {done && <Check size={14} />}
+                        {canKick ? (
+                          <button
+                            type="button"
+                            className="kick-button"
+                            disabled={busy}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `${m.name}님을 팟에서 추방할까요? 추방당한 사람은 이 팟에 다시 참가할 수 없어요.`
+                                )
+                              ) {
+                                act(() => kickParticipant(selected.id, m.uid), "참가자를 추방했어요.");
+                              }
+                            }}
+                          >
+                            추방
+                          </button>
+                        ) : (
+                          <>
+                            {label}
+                            {done && <Check size={14} />}
+                          </>
+                        )}
                       </span>
                     </li>
                   );
@@ -1388,10 +1445,15 @@ export default function TaxiApp() {
                       window.confirm(
                         selected.hostUid === authUser?.uid
                           ? "호스트가 나가면 팟이 폐지되고 모두 탈퇴돼요. 계속할까요?"
-                          : "이 팟에서 나갈까요?"
+                          : "이 팟에서 나갈까요? 나가면 이 팟에는 다시 참가할 수 없어요."
                       )
                     )
-                      act(() => leavePod(selected.id), "팟에서 나왔어요.");
+                      act(
+                        () => leavePod(selected.id),
+                        selected.hostUid === authUser?.uid
+                          ? "팟에서 나왔어요."
+                          : "팟에서 나왔어요. 이 팟에는 다시 참가할 수 없어요."
+                      );
                   }}
                 >
                   {selected.hostUid === authUser?.uid ? "팟 폐지하고 나가기" : "팟에서 나가기"}

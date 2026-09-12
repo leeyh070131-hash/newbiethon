@@ -153,6 +153,7 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     status: "recruiting",
     participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false, votedClose: false }],
     participantUids: [hostUid],
+    leftUids: [],
     escrowTotal: 0,
     awaitingExtension: false,
     createdAt: now,
@@ -217,6 +218,10 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
     }
     if (pod.participants.some((p) => p.uid === uid)) {
       throw new ConflictError("이미 참가한 팟입니다.");
+    }
+    if (pod.leftUids?.includes(uid)) {
+      // 자진 탈퇴했거나 추방당한 사람은 같은 팟에 다시 들어올 수 없다.
+      throw new ConflictError("이 팟에서 나간 이력이 있어 다시 참가할 수 없습니다.");
     }
     if (pod.participants.length >= pod.maxParticipants) {
       // FR-12/AC-4
@@ -365,12 +370,75 @@ export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
         ...pod,
         participants: remainingParticipants,
         participantUids: pod.participantUids.filter((participantUid) => participantUid !== uid),
+        // 자진 탈퇴한 사람은 이 팟에 다시 참가할 수 없다.
+        leftUids: [...(pod.leftUids ?? []), uid],
         pricePerPerson: computePricePerPerson(pod.totalPrice, remainingParticipants.length),
         updatedAt: Timestamp.now(),
       };
     }
     tx.set(ref, updated);
     return updated;
+  });
+}
+
+/**
+ * 호스트가 아직 확정 동의(votedConfirm)를 하지 않은 참가자를 추방한다. 이미 확정 동의를
+ * 마친 참가자는 추방할 수 없다(마음이 맞아 동의까지 한 사람을 일방적으로 빼는 것을 막기 위함).
+ * leavePod와 마찬가지로 대상은 이 팟에 다시 참가할 수 없고, 남은 인원은 확정 투표를 다시
+ * 해야 하며 인당예상가격도 다시 계산된다. 추방당했다는 사실은 대상 유저 문서에
+ * pendingNotice로 남겨 프론트가 폴링으로 알림 팝업을 띄울 수 있게 한다.
+ */
+export async function kickParticipant(hostUid: string, podId: string, targetUid: string): Promise<PodDoc> {
+  const db = getAdminDb();
+  const podRef = db.collection(COLLECTIONS.pods).doc(podId);
+  const targetUserRef = db.collection(COLLECTIONS.users).doc(targetUid);
+
+  return db.runTransaction(async (tx) => {
+    const [podSnapshot, targetUserSnapshot] = await Promise.all([tx.get(podRef), tx.get(targetUserRef)]);
+    if (!podSnapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    const pod = podSnapshot.data() as PodDoc;
+
+    if (pod.hostUid !== hostUid) {
+      throw new ForbiddenError("호스트만 참가자를 추방할 수 있습니다.");
+    }
+    if (pod.status !== "recruiting") {
+      throw new ConflictError("이미 확정되었거나 종료된 팟입니다.");
+    }
+    if (targetUid === hostUid) {
+      throw new ValidationError("호스트는 자기 자신을 추방할 수 없습니다.");
+    }
+    const target = pod.participants.find((p) => p.uid === targetUid);
+    if (!target) {
+      throw new ValidationError("이 팟의 참가자가 아닙니다.");
+    }
+    if (target.votedConfirm) {
+      throw new ConflictError("이미 확정 동의를 마친 참가자는 추방할 수 없습니다.");
+    }
+
+    const now = Timestamp.now();
+    const remainingParticipants = pod.participants
+      .filter((p) => p.uid !== targetUid)
+      .map((p) => ({ ...p, votedConfirm: false }));
+    const updatedPod: PodDoc = {
+      ...pod,
+      participants: remainingParticipants,
+      participantUids: pod.participantUids.filter((uid) => uid !== targetUid),
+      leftUids: [...(pod.leftUids ?? []), targetUid],
+      pricePerPerson: computePricePerPerson(pod.totalPrice, remainingParticipants.length),
+      updatedAt: now,
+    };
+    tx.set(podRef, updatedPod);
+
+    if (targetUserSnapshot.exists) {
+      const targetUser = targetUserSnapshot.data() as UserDoc;
+      tx.set(targetUserRef, {
+        ...targetUser,
+        pendingNotice: { type: "kicked", podId, createdAt: now },
+        updatedAt: now,
+      });
+    }
+
+    return updatedPod;
   });
 }
 

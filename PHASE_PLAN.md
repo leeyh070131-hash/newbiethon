@@ -28,7 +28,9 @@
 
 ## Phase 1-D. 팟 참가/탈퇴
 - Backend: ✅ `joinPod`/`leavePod` (동성 필터, 정원마감, 호스트 탈퇴시 자동 폐지, 트랜잭션 처리)
+  - (2026-09-12) `kickParticipant` 추가 — 호스트가 확정 동의 전인 참가자만 추방 가능. 탈퇴·추방한 uid는 `leftUids`에 기록되어 재참가 차단(`joinPod`에서 검사). 추방 시 대상 유저 문서에 `pendingNotice` 기록(`PATCH` 아님, `users/{uid}` 직접 갱신) → `DELETE /api/profile/notice`로 확인 처리.
 - Frontend: ✅ 참가/탈퇴 버튼, 참가자 목록
+  - (2026-09-12) 참가자 목록에 호스트 전용 "추방" 버튼(준비 안 한 참가자만), 추방당했을 때 뜨는 확인 팝업(`overlay: "kicked"`), 탈퇴/추방 시 "다시 참가할 수 없다" 안내 문구 추가
 
 ## Phase 1-E. 마일리지
 - Backend: ✅ `backend/services/mileage.ts` (쿠폰/Mock 충전/잔액 조회)
