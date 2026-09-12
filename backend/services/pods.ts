@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { COLLECTIONS } from "../models/collections";
 import { getAdminDb } from "../lib/firebase-admin";
-import { ValidationError } from "../lib/http-errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/http-errors";
 import { haversineDistanceMeters, type LatLng } from "../lib/geo";
 import { getProfile } from "./profile";
 import { getStationById, getStationsByIds } from "./stations";
@@ -133,4 +133,77 @@ export async function listPods(location?: LatLng): Promise<PodDoc[]> {
     })
     .sort((a, b) => a.distance - b.distance)
     .map(({ pod }) => pod);
+}
+
+/** FR-11/FR-12/AC-3/AC-4: 동성만, 정원 마감 전까지만 참가 가능. 동시 참가로 정원 초과가 나지 않도록 트랜잭션으로 처리한다. */
+export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
+  const profile = await getProfile(uid); // 프로필 없으면 404로 전파
+
+  const db = getAdminDb();
+  const ref = db.collection(COLLECTIONS.pods).doc(podId);
+
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    const pod = snapshot.data() as PodDoc;
+
+    if (pod.status !== "recruiting") {
+      throw new ConflictError("이미 마감되었거나 확정된 팟입니다.");
+    }
+    if (pod.gender !== profile.gender) {
+      // FR-11/AC-3: 동성 팟만 참가 가능
+      throw new ForbiddenError("이 팟은 참가자와 등록 성별이 다릅니다.");
+    }
+    if (pod.participants.some((p) => p.uid === uid)) {
+      throw new ConflictError("이미 참가한 팟입니다.");
+    }
+    if (pod.participants.length >= pod.maxParticipants) {
+      // FR-12/AC-4
+      throw new ConflictError("모집 마감된 팟입니다.");
+    }
+
+    const updated: PodDoc = {
+      ...pod,
+      participants: [...pod.participants, { uid, joinedAt: Timestamp.now(), votedConfirm: false }],
+      updatedAt: Timestamp.now(),
+    };
+    tx.set(ref, updated);
+    return updated;
+  });
+}
+
+/**
+ * FR-13/FR-13a/AC-5/AC-5a: 확정 전(status === "recruiting")에만 탈퇴 가능.
+ * 호스트가 탈퇴하면 팟 전체가 자동 폐지된다(마일리지 차감 전 상태라 환불 처리는 불필요).
+ */
+export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
+  const db = getAdminDb();
+  const ref = db.collection(COLLECTIONS.pods).doc(podId);
+
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    const pod = snapshot.data() as PodDoc;
+
+    if (pod.status !== "recruiting") {
+      throw new ConflictError("이미 확정되었거나 종료된 팟은 탈퇴할 수 없습니다.");
+    }
+    if (!pod.participants.some((p) => p.uid === uid)) {
+      throw new ValidationError("이 팟의 참가자가 아닙니다.");
+    }
+
+    let updated: PodDoc;
+    if (uid === pod.hostUid) {
+      // FR-13a: 호스트 탈퇴 → 팟 자동 폐지. 참가자 목록은 기록으로 남긴다(FR-29 대비).
+      updated = { ...pod, status: "dissolved", updatedAt: Timestamp.now() };
+    } else {
+      updated = {
+        ...pod,
+        participants: pod.participants.filter((p) => p.uid !== uid),
+        updatedAt: Timestamp.now(),
+      };
+    }
+    tx.set(ref, updated);
+    return updated;
+  });
 }

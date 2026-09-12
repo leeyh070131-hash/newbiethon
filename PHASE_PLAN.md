@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-C (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-D (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -31,10 +31,10 @@
 - 검증: AC-1, AC-2, AC-13 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-D. 팟 참가/탈퇴
-- Backend: 참가 API(동성 필터, 정원마감) (FR-11, FR-12), 탈퇴 API(확정 전 참가자/호스트 탈퇴, 호스트 탈퇴시 자동 폐지) (FR-13, FR-13a)
-- Frontend: 참가/탈퇴 버튼, 참가자 목록 표시
-- 예정 API: `POST /api/pods/:id/join`, `DELETE /api/pods/:id/leave`
-- 검증: AC-3, AC-4, AC-5, AC-5a
+- Backend: ✅ 참가 API(동성 필터, 정원마감, 트랜잭션으로 동시성 처리) (FR-11, FR-12), 탈퇴 API(확정 전 참가자/호스트 탈퇴, 호스트 탈퇴시 자동 폐지) (FR-13, FR-13a) — `backend/services/pods.ts`의 `joinPod`/`leavePod`
+- Frontend: ⬜ 참가/탈퇴 버튼, 참가자 목록 표시 — Codex 담당, 미착수
+- 예정 API: `POST /api/pods/:id/join`, `DELETE /api/pods/:id/leave` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-3, AC-4, AC-5, AC-5a (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-E. 마일리지
 - Backend: 쿠폰 충전 API(횟수 제한 없음) (FR-15), 계좌송금 Mock 충전 API (FR-16), 잔액 조회 API (FR-17)

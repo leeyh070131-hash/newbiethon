@@ -166,3 +166,38 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-14a: `lat`/`lng`가 없거나 숫자가 아니면 최신 생성순(`createdAt` desc)으로 정렬.
 - 확정(`confirmed`)·폐지(`dissolved`)·해지(`closed`) 상태 팟은 포함되지 않는다.
 - 이 쿼리는 Firestore 복합 인덱스가 필요하다 — `firestore.indexes.json` 참고, `firebase deploy --only firestore:indexes`로 배포.
+
+## POST /api/pods/:id/join
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+본문 없음
+
+### Response
+```json
+{ "pod": "POST /api/pods 응답의 pod와 동일한 형태, participants에 본인이 추가된 상태" }
+```
+
+### 비고
+- FR-11/AC-3: 본인 등록 성별이 팟의 `gender`와 다르면 `403`.
+- FR-12/AC-4: `participants.length`가 `maxParticipants`에 도달했으면 `409`("모집 마감된 팟입니다").
+- `409`: 이미 참가한 팟에 다시 참가 시도, 또는 팟 상태가 `recruiting`이 아님(이미 확정/폐지/해지).
+- `404`: 팟이 없음, 또는 본인 프로필이 없음(`POST /api/profile` 먼저 필요).
+- 동시 참가로 정원 초과가 나지 않도록 서버에서 Firestore 트랜잭션으로 처리한다.
+
+## DELETE /api/pods/:id/leave
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+본문 없음
+
+### Response
+```json
+{ "pod": "탈퇴 반영 후 pod 최신 상태" }
+```
+
+### 비고
+- FR-13/AC-5: 팟이 `recruiting` 상태일 때만 탈퇴 가능. 참가자가 탈퇴하면 `participants`에서 본인만 제거된다. 확정 전이라 마일리지 차감이 없으므로 환불 처리도 없다.
+- FR-13a/AC-5a: 탈퇴하는 사람이 호스트(`hostUid`)면 팟 전체가 `dissolved`로 바뀐다(참가자 목록 자체는 기록으로 남지만 팟은 종료됨).
+- `409`: 팟이 이미 `recruiting`이 아님(확정/폐지/해지된 팟은 이 엔드포인트로 탈퇴 불가).
+- `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟이 없음.
