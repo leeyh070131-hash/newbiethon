@@ -71,15 +71,19 @@ export async function getProfile(uid: string): Promise<UserDoc> {
 }
 
 /**
- * FR-3/FR-4: 본인만 호출 가능한 이 경로를 통해서만 name/gender/bankAccount가 바뀐다.
+ * FR-3/FR-4: 본인만 호출 가능한 이 경로를 통해서만 bankAccount가 바뀐다.
+ * name/gender는 최초 인증(createProfile) 이후 영구히 고정되며 이 경로로도 바꿀 수 없다.
  * 그 외 어떤 백엔드 로직도 이 필드들을 건드리지 않는다.
  */
 export async function updateProfile(uid: string, input: Record<string, unknown>): Promise<UserDoc> {
   if (Object.keys(input).length === 0) {
     throw new ValidationError("수정할 필드가 없습니다.");
   }
+  if (input.name !== undefined || input.gender !== undefined) {
+    throw new ValidationError("이름과 성별은 최초 인증 후에는 변경할 수 없습니다.");
+  }
   validateProfileInput(input, false);
-  const { name, gender, bankAccount } = input as Partial<ProfileInput>;
+  const { bankAccount } = input as Partial<ProfileInput>;
 
   const ref = getAdminDb().collection(COLLECTIONS.users).doc(uid);
   const existing = await ref.get();
@@ -88,8 +92,6 @@ export async function updateProfile(uid: string, input: Record<string, unknown>)
   }
 
   const updates: Partial<UserDoc> = { updatedAt: Timestamp.now() };
-  if (name !== undefined) updates.name = name.trim();
-  if (gender !== undefined) updates.gender = gender;
   if (bankAccount !== undefined) updates.bankAccount = bankAccount.trim();
 
   await ref.update(updates);

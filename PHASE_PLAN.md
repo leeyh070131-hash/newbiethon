@@ -17,7 +17,8 @@
 
 ## Phase 1-B. 사용자 프로필
 - Backend: ✅ `backend/services/profile.ts` (생성/조회/수정, 불변성은 본인 uid 토큰으로만 수정 가능한 구조로 보장)
-- Frontend: ✅ 온보딩 폼(이름/성별/계좌), 마이페이지 수정 폼
+  - (2026-09-12) `updateProfile`이 `name`/`gender`를 아예 받지 않도록 변경 — 최초 인증(`createProfile`) 이후 영구 고정, PATCH로도 변경 불가.
+- Frontend: ✅ 온보딩 폼(이름/성별/계좌) — (2026-09-12) 실제로 인증하지 않는 공인인증서 데모 화면으로 리스킨, 마이페이지 수정 폼은 계좌번호만 수정 가능(이름/성별은 비활성 표시)
 
 ## Phase 1-C. 팟 생성 & 메인 목록
 - Backend: ✅ `backend/services/pods.ts`의 `createPod`/`listPods`

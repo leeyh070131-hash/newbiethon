@@ -346,15 +346,21 @@ export default function TaxiApp() {
   async function profileSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    const input = {
-      name: String(data.get("name")),
-      gender: data.get("gender") as Gender,
-      bankAccount: String(data.get("account")),
-    };
     setBusy(true);
     setError("");
     try {
-      setProfile(profile ? await updateProfile(input) : await createProfile(input));
+      if (profile) {
+        // 이름·성별은 최초 인증 후 변경할 수 없어 계좌번호만 수정한다.
+        setProfile(await updateProfile({ bankAccount: String(data.get("account")) }));
+      } else {
+        setProfile(
+          await createProfile({
+            name: String(data.get("name")),
+            gender: data.get("gender") as Gender,
+            bankAccount: String(data.get("account")),
+          })
+        );
+      }
       setNotice("프로필을 저장했어요.");
       close();
     } catch (e) {
@@ -447,7 +453,7 @@ export default function TaxiApp() {
       : overlay === "profile"
       ? profile
         ? "프로필 수정"
-        : "반가워요! 프로필을 완성해 주세요"
+        : "공인인증서로 본인인증"
       : overlay === "create"
       ? "함께 갈 팟 만들기"
       : overlay === "charge"
@@ -1002,6 +1008,12 @@ export default function TaxiApp() {
           )}
           {overlay === "profile" && (
             <form className="form" onSubmit={profileSubmit}>
+              {!profile && (
+                <div className="inline-info">
+                  <ShieldCheck size={17} />
+                  실제 인증기관과 연동되지 않는 데모 화면이에요. 여기서 입력한 정보로 최초 프로필이 만들어져요.
+                </div>
+              )}
               <label>
                 이름
                 <input
@@ -1009,6 +1021,7 @@ export default function TaxiApp() {
                   placeholder="예: 김택시"
                   defaultValue={profile?.name ?? authUser?.displayName ?? ""}
                   maxLength={20}
+                  disabled={!!profile}
                   required
                 />
               </label>
@@ -1016,15 +1029,31 @@ export default function TaxiApp() {
                 <legend>성별</legend>
                 <div className="radio-group">
                   <label>
-                    <input type="radio" name="gender" value="female" defaultChecked={!profile || profile.gender === "female"} />
+                    <input
+                      type="radio"
+                      name="gender"
+                      value="female"
+                      defaultChecked={!profile || profile.gender === "female"}
+                      disabled={!!profile}
+                    />
                     여성
                   </label>
                   <label>
-                    <input type="radio" name="gender" value="male" defaultChecked={profile?.gender === "male"} />
+                    <input
+                      type="radio"
+                      name="gender"
+                      value="male"
+                      defaultChecked={profile?.gender === "male"}
+                      disabled={!!profile}
+                    />
                     남성
                   </label>
                 </div>
-                <small>등록한 성별과 같은 팟에 참가할 수 있어요. 본인이 직접 수정하기 전까지 바뀌지 않아요.</small>
+                <small>
+                  {profile
+                    ? "이름과 성별은 최초 인증 후에는 변경할 수 없어요."
+                    : "등록한 성별과 같은 팟에 참가할 수 있어요. 인증 후에는 바꿀 수 없으니 신중하게 선택해 주세요."}
+                </small>
               </fieldset>
               <label>
                 계좌번호
@@ -1039,7 +1068,7 @@ export default function TaxiApp() {
                 />
               </label>
               <button className="primary full" type="submit" disabled={busy}>
-                {profile ? "변경 내용 저장" : "저장하고 시작하기"}
+                {profile ? "변경 내용 저장" : "인증하고 시작하기"}
                 <ArrowRight size={17} />
               </button>
             </form>

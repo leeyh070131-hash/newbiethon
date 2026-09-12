@@ -95,7 +95,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ### Request
 헤더: `Authorization: Bearer <Firebase ID Token>`
 ```json
-{ "name": "string (선택)", "gender": "\"male\" | \"female\" (선택)", "bankAccount": "string (선택)" }
+{ "bankAccount": "string (선택) — name/gender는 2026-09-12부터 이 엔드포인트로 변경 불가, 아래 비고 참고" }
 ```
 한 개 이상 필드 필요.
 
@@ -105,7 +105,8 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ```
 
 ### 비고
-- FR-3/FR-4: name/gender/bankAccount는 본인이 이 엔드포인트로 직접 호출하지 않는 한 절대 바뀌지 않는다 — 토큰의 uid로만 본인 문서를 수정하므로 다른 경로로는 변경 불가.
+- FR-3/FR-4: bankAccount는 본인이 이 엔드포인트로 직접 호출하지 않는 한 절대 바뀌지 않는다 — 토큰의 uid로만 본인 문서를 수정하므로 다른 경로로는 변경 불가.
+- (2026-09-12 결정 변경 — 이전: name/gender도 PATCH로 수정 가능) `name`/`gender`는 `POST /api/profile`(최초 인증) 시점에만 정해지고 이후 영구히 고정된다. 요청 본문에 `name` 또는 `gender`가 있으면 값이 기존과 같더라도 `400`("이름과 성별은 최초 인증 후에는 변경할 수 없습니다.")으로 거부된다.
 - 404: 아직 프로필이 없음(POST 먼저 필요). 400: 본문이 비어있거나 형식 오류.
 
 ## POST /api/pods
