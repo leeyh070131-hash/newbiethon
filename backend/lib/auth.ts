@@ -1,11 +1,7 @@
 import { getAdminAuth } from "./firebase-admin";
+import { UnauthorizedError } from "./http-errors";
 
-export class UnauthorizedError extends Error {
-  constructor(message = "인증되지 않은 요청입니다.") {
-    super(message);
-    this.name = "UnauthorizedError";
-  }
-}
+export { UnauthorizedError };
 
 /**
  * Authorization: Bearer <Firebase ID Token> 헤더를 검증해 uid를 반환한다.

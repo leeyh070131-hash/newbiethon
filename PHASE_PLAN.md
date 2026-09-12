@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-A (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-B (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -18,10 +18,10 @@
 - 검증: 로그인 성공(프론트 완료 후 확인), 정류장 목록 조회 가능(지하철역만 — `npm run seed:stations` 실행 후 `GET /api/stations`로 확인 가능. Firebase 프로젝트/서비스 계정 키가 `.env.local`에 있어야 함)
 
 ## Phase 1-B. 사용자 프로필
-- Backend: 프로필 생성/수정 API, 본인 수정 전까지 불변 처리 (FR-2, FR-3)
-- Frontend: 최초 로그인 온보딩 폼(이름/성별/계좌), 마이페이지 수정 폼 (FR-4)
-- 예정 API: `GET /api/profile`, `POST /api/profile`, `PATCH /api/profile`
-- 검증: 재수정 전까지 정보 불변 확인
+- Backend: ✅ 프로필 생성/조회/수정 API (`backend/services/profile.ts`), 본인 토큰(uid)으로만 본인 문서 수정 가능하도록 해 불변성 보장 (FR-2, FR-3)
+- Frontend: ⬜ 최초 로그인 온보딩 폼(이름/성별/계좌), 마이페이지 수정 폼 (FR-4) — Codex 담당, 미착수
+- 예정 API: `GET /api/profile`, `POST /api/profile`, `PATCH /api/profile` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: 재수정 전까지 정보 불변 확인 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-C. 팟 생성 & 메인 목록
 - Backend: 팟 생성 API(최소인원≤최대인원 검증, 동성 자동 설정) (FR-7~FR-10), 목록 API(위치기반 정렬 / 거부시 최신순) (FR-14, FR-14a)
