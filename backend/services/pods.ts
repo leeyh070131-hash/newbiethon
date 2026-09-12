@@ -347,9 +347,12 @@ export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
       // FR-13a: 호스트 탈퇴 → 팟 자동 폐지. 참가자 목록은 기록으로 남긴다(FR-29 대비).
       updated = { ...pod, status: "dissolved", updatedAt: Timestamp.now() };
     } else {
+      // 참가자 구성이 바뀌므로, 남은 인원은 확정 투표를 처음부터 다시 해야 한다.
       updated = {
         ...pod,
-        participants: pod.participants.filter((p) => p.uid !== uid),
+        participants: pod.participants
+          .filter((p) => p.uid !== uid)
+          .map((p) => ({ ...p, votedConfirm: false })),
         participantUids: pod.participantUids.filter((participantUid) => participantUid !== uid),
         updatedAt: Timestamp.now(),
       };
