@@ -481,6 +481,11 @@ export async function flagDepartedPodsForExtension(): Promise<number> {
 /**
  * FR-24~FR-26/AC-8/AC-9: 연장 동의 투표. 한 명이라도 거부하면 즉시 폐지(FR-25),
  * 전원 동의하면 출발시간을 30분 연장하고 다음 라운드를 위해 votedExtend를 초기화한다(FR-24).
+ *
+ * awaitingExtension 플래그는 원래 스케줄러(flagDepartedPodsForExtension)가 미리 세워두는
+ * 값이지만, 외부 크론(GitHub Actions 등)의 실행 지연에 기능이 좌우되면 안 되므로 여기서도
+ * 출발시간이 실제로 지났으면 그 자리에서 직접 플래그를 세운다 — 스케줄러는 "다른 참가자들의
+ * 화면에 팝업을 더 빨리 띄워주는" 보조 수단일 뿐, 이 기능이 동작하기 위한 필수 조건이 아니다.
  */
 export async function voteExtend(uid: string, podId: string, agree: boolean): Promise<PodDoc> {
   const db = getAdminDb();
@@ -489,16 +494,24 @@ export async function voteExtend(uid: string, podId: string, agree: boolean): Pr
   return db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
     if (!snapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
-    const pod = snapshot.data() as PodDoc;
+    let pod = snapshot.data() as PodDoc;
 
-    if (!pod.awaitingExtension) {
-      throw new ConflictError("지금은 연장 동의 투표 대상이 아닙니다.");
+    if (pod.status !== "recruiting") {
+      throw new ConflictError("이미 확정되었거나 종료된 팟입니다.");
     }
     if (!pod.participants.some((p) => p.uid === uid)) {
       throw new ValidationError("이 팟의 참가자가 아닙니다.");
     }
 
     const now = Timestamp.now();
+
+    if (!pod.awaitingExtension) {
+      if (pod.departureTime.toMillis() > now.toMillis()) {
+        throw new ConflictError("아직 출발시간 전이라 연장 동의 투표를 할 수 없습니다.");
+      }
+      // 스케줄러가 아직 못 돌았어도 출발시간이 지났으면 지금 이 라운드를 직접 연다.
+      pod = { ...pod, awaitingExtension: true, participants: pod.participants.map((p) => ({ ...p, votedExtend: false })) };
+    }
 
     if (!agree) {
       // FR-25/AC-9: 한 명이라도 거부하면 즉시 폐지. 마일리지 차감 전이라 환불 처리도 없다(FR-26).

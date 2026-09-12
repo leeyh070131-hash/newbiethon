@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import {
   ArrowDownUp, ArrowRight, Check, ChevronDown, ChevronRight, Clock3, Compass, CreditCard, History,
@@ -78,6 +78,8 @@ export default function TaxiApp() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState({ from: "", to: "" });
+  const [createFrom, setCreateFrom] = useState("");
+  const [createTo, setCreateTo] = useState("");
   const [genderFilter, setGenderFilter] = useState<"all" | Gender>("all");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [sort, setSort] = useState<"newest" | "departure" | "distance">("newest");
@@ -122,6 +124,16 @@ export default function TaxiApp() {
       setHistoryPods(history);
     } catch (e) {
       setError(errorMessage(e));
+    }
+  }, []);
+  // 마일리지는 본인 행동(투표/정산 등)뿐 아니라 다른 참가자의 마지막 동의로도 바뀔 수 있어
+  // (예: 내가 이미 확정 동의한 뒤 다른 사람이 마지막으로 동의하면 그 순간 내 잔액이 차감됨),
+  // 헤더/지갑에 보이는 값이 곧바로 맞아야 하는 곳마다 이 함수를 함께 호출한다.
+  const refreshProfile = useCallback(async () => {
+    try {
+      setProfile(await getProfile());
+    } catch {
+      // 폴링 중 일시적 실패는 조용히 무시한다 — 다음 주기에 다시 시도된다.
     }
   }, []);
   const refreshSelected = useCallback(async (id: string) => {
@@ -186,20 +198,31 @@ export default function TaxiApp() {
     if (tab === "mine" && authUser) refreshMine();
   }, [tab, authUser, refreshMine]);
   // 정산 완료 알림은 "내 팟" 탭을 보고 있지 않아도 떠야 하므로, 로그인 중에는
-  // 탭과 무관하게 주기적으로 내 팟 상태를 확인한다.
+  // 탭과 무관하게 주기적으로 내 팟 상태를 확인한다. 다른 참가자의 마지막 동의로
+  // 내 마일리지가 바뀌는 경우도 있어 같은 주기로 잔액도 함께 갱신한다.
   useEffect(() => {
     if (!authUser) {
       prevConfirmedIdsRef.current = null;
       return;
     }
-    const timer = setInterval(refreshMine, 8000);
+    const timer = setInterval(() => {
+      refreshMine();
+      refreshProfile();
+    }, 8000);
     return () => clearInterval(timer);
-  }, [authUser, refreshMine]);
+  }, [authUser, refreshMine, refreshProfile]);
   useEffect(() => {
     if (tab === "wallet" && authUser) {
       getMileageTransactions().then(setMileageTransactions).catch((e) => setError(errorMessage(e)));
     }
   }, [tab, authUser]);
+  // 팟 만들기 창을 열 때마다 검색 조건(있다면)으로 출발/도착지를 미리 채운다.
+  useEffect(() => {
+    if (overlay === "create") {
+      setCreateFrom(query.from);
+      setCreateTo(query.to);
+    }
+  }, [overlay, query.from, query.to]);
   useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(""), 5000);
@@ -211,9 +234,12 @@ export default function TaxiApp() {
   useEffect(() => {
     if (!selectedId || (overlay !== "detail" && overlay !== "extend")) return;
     refreshSelected(selectedId);
-    const timer = setInterval(() => refreshSelected(selectedId), 4000);
+    const timer = setInterval(() => {
+      refreshSelected(selectedId);
+      refreshProfile(); // 다른 참가자의 동의로 이 화면을 보는 동안 내 잔액이 바뀔 수 있다.
+    }, 4000);
     return () => clearInterval(timer);
-  }, [selectedId, overlay, refreshSelected]);
+  }, [selectedId, overlay, refreshSelected, refreshProfile]);
 
   useEffect(() => {
     // 이미 위치를 허용한 사용자는 별도 클릭 없이 가까운 출발지부터 봅니다.
@@ -341,12 +367,16 @@ export default function TaxiApp() {
   async function createSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    setBusy(true);
     setError("");
+    if (!createFrom || !createTo) {
+      setError("목록에 있는 정류장·역 이름을 정확히 입력해 출발지와 도착지를 선택해 주세요.");
+      return;
+    }
+    setBusy(true);
     try {
       const pod = await createPod({
-        departureStationId: String(data.get("from")),
-        arrivalStationId: String(data.get("to")),
+        departureStationId: createFrom,
+        arrivalStationId: createTo,
         departureTime: new Date(String(data.get("departure"))).toISOString(),
         maxParticipants: Number(data.get("max")),
         minParticipants: Number(data.get("min")),
@@ -369,7 +399,11 @@ export default function TaxiApp() {
       const pod = await action();
       setSelected(pod);
       setNotice(message);
-      await Promise.all([refreshExplore(), authUser ? refreshMine() : Promise.resolve()]);
+      await Promise.all([
+        refreshExplore(),
+        authUser ? refreshMine() : Promise.resolve(),
+        authUser ? refreshProfile() : Promise.resolve(),
+      ]);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -536,20 +570,16 @@ export default function TaxiApp() {
                 setQuery({ from, to });
               }}
             >
-              <div className="search-field">
-                <label htmlFor="search-from">
-                  <span className="pin-dot" />
-                  출발지
-                </label>
-                <select id="search-from" value={from} onChange={(e) => setFrom(e.target.value)}>
-                  <option value="">어디에서 출발하나요?</option>
-                  {stations.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <StationCombobox
+                id="search-from"
+                icon={<span className="pin-dot" />}
+                label="출발지"
+                placeholder="어디에서 출발하나요?"
+                value={from}
+                onChange={setFrom}
+                stations={stations}
+                wrapInSearchField
+              />
               <button
                 type="button"
                 className="swap-button"
@@ -561,20 +591,16 @@ export default function TaxiApp() {
               >
                 <ArrowDownUp size={18} />
               </button>
-              <div className="search-field">
-                <label htmlFor="search-to">
-                  <MapPin size={15} />
-                  도착지
-                </label>
-                <select id="search-to" value={to} onChange={(e) => setTo(e.target.value)}>
-                  <option value="">어디로 가시나요?</option>
-                  {stations.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <StationCombobox
+                id="search-to"
+                icon={<MapPin size={15} />}
+                label="도착지"
+                placeholder="어디로 가시나요?"
+                value={to}
+                onChange={setTo}
+                stations={stations}
+                wrapInSearchField
+              />
               <button className="primary search-button" type="submit">
                 <Search size={19} />
                 팟 찾기
@@ -1024,8 +1050,22 @@ export default function TaxiApp() {
                 <ShieldCheck size={17} />
                 {genderLabel(profile.gender)} 팟으로 자동 생성돼요.
               </div>
-              <StationSelect name="from" label="출발지" value={query.from} stations={stations} />
-              <StationSelect name="to" label="도착지" value={query.to} stations={stations} />
+              <StationCombobox
+                id="create-from"
+                label="출발지"
+                placeholder="정류장·역 이름을 입력해 주세요"
+                value={createFrom}
+                onChange={setCreateFrom}
+                stations={stations}
+              />
+              <StationCombobox
+                id="create-to"
+                label="도착지"
+                placeholder="정류장·역 이름을 입력해 주세요"
+                value={createTo}
+                onChange={setCreateTo}
+                stations={stations}
+              />
               <label>
                 출발시간
                 <input type="datetime-local" name="departure" defaultValue={dateInput(Date.now() + 30 * 60000)} min={dateInput(now)} required />
@@ -1213,7 +1253,7 @@ export default function TaxiApp() {
                 })}
               </ul>
 
-              {selected.status === "recruiting" && selected.awaitingExtension && myMember ? (
+              {selected.status === "recruiting" && toMs(selected.departureTime) <= now && myMember ? (
                 <div className="vote-panel">
                   <h3>출발시간이 되었어요</h3>
                   <p>모두 동의하면 출발시간을 30분 연장해요. 한 명이라도 거절하면 팟이 폐지돼요.</p>
@@ -1278,14 +1318,14 @@ export default function TaxiApp() {
                     disabled={
                       busy ||
                       selected.participants.length >= selected.maxParticipants ||
-                      selected.awaitingExtension ||
+                      toMs(selected.departureTime) <= now ||
                       (!!profile && selected.gender !== profile.gender)
                     }
                     onClick={() => (authUser ? act(() => joinPod(selected.id), "팟에 참가했어요!") : open("login"))}
                   >
                     {selected.participants.length >= selected.maxParticipants
                       ? "모집 마감"
-                      : selected.awaitingExtension
+                      : toMs(selected.departureTime) <= now
                       ? "출발시간 경과 · 연장 대기"
                       : profile && selected.gender !== profile.gender
                       ? "등록 성별과 같은 팟만 참가할 수 있어요"
@@ -1349,30 +1389,73 @@ export default function TaxiApp() {
   );
 }
 
-function StationSelect({
-  name,
+/**
+ * 정류장/역을 타이핑으로 검색해 고를 수 있는 입력창. 네이티브 <input list>+<datalist>를
+ * 써서 별도 라이브러리 없이 브라우저 자동완성을 활용한다. 표시는 이름, 실제 선택값은
+ * onChange로 넘기는 station id — 목록에 없는 텍스트를 입력하면 선택값은 빈 문자열이 된다.
+ */
+function StationCombobox({
+  id,
   label,
+  icon,
+  placeholder,
   value,
+  onChange,
   stations,
+  wrapInSearchField,
 }: {
-  name: string;
+  id: string;
   label: string;
+  icon?: ReactNode;
+  placeholder: string;
   value: string;
+  onChange: (stationId: string) => void;
   stations: StationDoc[];
+  wrapInSearchField?: boolean;
 }) {
+  const selectedName = stations.find((s) => s.id === value)?.name ?? "";
+  const [text, setText] = useState(selectedName);
+  useEffect(() => setText(selectedName), [selectedName]);
+  const listId = `${id}-list`;
+
+  const inputAndList = (
+    <>
+      <input
+        id={id}
+        list={listId}
+        value={text}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => {
+          const typed = e.target.value;
+          setText(typed);
+          const match = stations.find((s) => s.name === typed);
+          onChange(match ? match.id : "");
+        }}
+      />
+      <datalist id={listId}>
+        {stations.map((s) => (
+          <option key={s.id} value={s.name} />
+        ))}
+      </datalist>
+    </>
+  );
+
+  if (wrapInSearchField) {
+    return (
+      <div className="search-field">
+        <label htmlFor={id}>
+          {icon}
+          {label}
+        </label>
+        {inputAndList}
+      </div>
+    );
+  }
   return (
     <label>
       {label}
-      <select name={name} defaultValue={value} required>
-        <option value="" disabled>
-          정류장·역을 선택해 주세요
-        </option>
-        {stations.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+      {inputAndList}
     </label>
   );
 }
@@ -1391,6 +1474,7 @@ function PodCard({
   onClick: () => void;
 }) {
   const full = p.participants.length >= p.maxParticipants;
+  const departed = toMs(p.departureTime) <= now;
   const mins = Math.max(0, Math.ceil((toMs(p.departureTime) - now) / 60000));
   return (
     <button
@@ -1403,7 +1487,7 @@ function PodCard({
       <div className="card-top">
         <div>
           <span className={`badge ${p.status !== "recruiting" || full ? "neutral" : "green"}`}>
-            {p.status !== "recruiting" ? labels[p.status] : full ? "모집 마감" : p.awaitingExtension ? "연장 대기" : "모집 중"}
+            {p.status !== "recruiting" ? labels[p.status] : full ? "모집 마감" : departed ? "연장 대기" : "모집 중"}
           </span>
           <span className="gender-tag">{genderLabel(p.gender)} 팟</span>
         </div>

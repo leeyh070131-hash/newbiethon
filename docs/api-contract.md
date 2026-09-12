@@ -353,7 +353,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ```
 
 ### 비고
-- 팟이 `awaitingExtension === true`일 때만 호출 가능(`409` — 그 외엔 "지금은 연장 동의 투표 대상이 아닙니다").
+- **2026-09-12 수정**: 원래 `awaitingExtension === true`(스케줄러가 미리 세워둔 값)일 때만 호출 가능했으나, 외부 크론(GitHub Actions, 5분 주기)의 실행 지연에 기능이 좌우되는 문제가 있었다. 이제는 팟의 실제 `departureTime`이 이미 지났으면 `awaitingExtension`이 아직 `false`여도 호출 시점에 서버가 직접 그 자리에서 플래그를 세우고 진행한다. 아직 출발시간 전이면 `409`("아직 출발시간 전이라 연장 동의 투표를 할 수 없습니다"). 스케줄러는 다른 참가자의 화면에 팝업을 더 빨리 띄워주는 보조 수단으로만 남는다.
 - FR-25/AC-9: `agree: false`를 보낸 참가자가 한 명이라도 있으면 그 즉시 `status`가 `dissolved`로 바뀐다(다른 참가자 응답을 기다리지 않음).
 - FR-24/AC-8: 참가자 전원이 `agree: true`를 보내면 `departureTime`이 30분 뒤로 연장되고 `awaitingExtension`이 `false`로 돌아가며, 다음 라운드를 위해 전원의 `votedExtend`가 초기화된다(`votedConfirm`은 그대로 유지).
 - FR-26: 이 시점까지는 마일리지 차감이 없었으므로(미확정 상태) 폐지되어도 환불 처리가 필요 없다.
