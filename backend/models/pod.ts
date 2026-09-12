@@ -26,6 +26,7 @@ export interface PodDoc {
   hostUid: string;
   gender: Gender; // FR-9: 호스트의 등록 성별과 자동으로 동일
   departureStationId: string;
+  departureExit: string | null; // 출발지가 지하철역일 때 만남 장소로 지정한 출구 번호(선택 입력, 자유 문자열)
   arrivalStationId: string;
   departureTime: Timestamp;
   maxParticipants: number; // 모집인원(최대 정원), FR-12

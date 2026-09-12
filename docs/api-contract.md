@@ -63,6 +63,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "bankAccount": "string",
     "mileageBalance": "number",
     "pendingNotice": "{ type: \"kicked\", podId: string, createdAt: string (ISO 8601) } | null — 확인 전 알림 (2026-09-12 추가, 아래 비고 참고)",
+    "reportQuota": "{ date: string (YYYY-MM-DD, Asia/Seoul), count: number } | null — 오늘 신고한 횟수, 3에 도달하면 더 신고 불가 (2026-09-12 추가)",
     "createdAt": "string (ISO 8601)",
     "updatedAt": "string (ISO 8601)"
   }
@@ -133,6 +134,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ```json
 {
   "departureStationId": "string — /api/stations의 id",
+  "departureExit": "string | null (선택) — 출발지가 지하철역(type: \"subway\")일 때만 입력 가능한 출구 번호, 12자 이하. (2026-09-12 추가)",
   "arrivalStationId": "string — /api/stations의 id, departureStationId와 달라야 함",
   "departureTime": "string — ISO 8601 날짜/시간",
   "maxParticipants": "number — 모집인원(최대 정원), 1 이상 정수",
@@ -150,6 +152,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "hostUid": "string",
     "gender": "\"male\" | \"female\" — 호스트 등록 성별로 자동 설정 (FR-9)",
     "departureStationId": "string",
+    "departureExit": "string | null — 출발지 만남 장소로 지정한 출구 번호 (2026-09-12 추가)",
     "arrivalStationId": "string",
     "departureTime": "string (ISO 8601)",
     "maxParticipants": "number",
@@ -171,7 +174,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ### 비고
 - FR-7: 생성자가 자동으로 호스트 겸 첫 참가자가 된다(참가자 배열에 본인 포함, votedConfirm은 아직 false).
 - FR-10/AC-2: `minParticipants > maxParticipants`이면 400.
-- 400: `departureStationId`/`arrivalStationId`가 `/api/stations`에 없는 id이거나 서로 같은 경우도 포함.
+- 400: `departureStationId`/`arrivalStationId`가 `/api/stations`에 없는 id이거나 서로 같은 경우도 포함. `departureExit`을 출발지가 버스정류장(`type: "bus"`)인데 넣은 경우도 400.
 - (2026-09-12 브레이킹 체인지) 호스트가 인당가격을 직접 입력하던 방식(`pricePerPerson`)에서, 택시 총 금액(`totalPrice`)을 입력하면 인당예상가격을 참가자 수로 자동 N빵(`ceil` 나눗셈) 하는 방식으로 바뀌었다. `pricePerPerson`은 이제 응답 전용 파생 필드이며, 참가(`POST /join`)·탈퇴(`DELETE /leave`)로 참가자 수가 바뀔 때마다 서버가 자동으로 다시 계산해 갱신한다. `totalPrice`는 생성 후 고정이며 바뀌지 않는다.
 - 404: 프로필을 아직 생성하지 않은 사용자 (`POST /api/profile` 먼저 필요, gender를 여기서 가져오므로 FR-9의 전제조건).
 
@@ -264,6 +267,26 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - `404`: 팟이 없음.
 - 탈퇴(`DELETE /leave`)와 동일하게 남은 참가자 전원의 `votedConfirm`이 초기화되고 `pricePerPerson`도 재계산되며, 대상은 `leftUids`에 추가되어 이 팟에 다시 참가할 수 없다.
 - 대상 유저 문서(`users/{targetUid}`)의 `pendingNotice`에 `{ type: "kicked", podId, createdAt }`를 기록한다 — 대상은 `GET /api/profile` 폴링으로 이를 확인하고 팝업을 띄운 뒤 `DELETE /api/profile/notice`로 지운다.
+
+## POST /api/pods/:id/report
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{ "targetUid": "string — 신고할 사람의 uid", "reason": "string — 신고 사유, 1~500자" }
+```
+
+### Response
+```json
+{ "ok": true }
+```
+
+### 비고
+- (2026-09-12 추가) 이 팟에 (지금이든 과거든) 함께 있었던 사람을 신고한다. 신고자·대상 둘 다 해당 팟의 `participantUids ∪ leftUids`에 포함되어 있어야 한다 — 자진 탈퇴했거나 추방당한 사람도 신고 대상이 될 수 있다.
+- 신고자 기준 **일일 3회 제한**(Asia/Seoul 자정 기준 초기화)이 있다. 초과 시 `409`("일일 신고 횟수(3회)를 모두 사용했습니다.").
+- `400`: `reason` 누락/빈 문자열/500자 초과, 본인을 신고, 또는 신고자·대상 중 이 팟과 관련 없는 uid.
+- `404`: 팟이 없음.
+- 접수되면 `reports` 컬렉션에 로그 문서(podId/reporterUid/reportedUid/reason/createdAt)를 남기고, 관리자 이메일(`leeyh070131@gmail.com`, Resend API)로 같은 내용을 보낸다. 이메일 발송은 최선 노력이며 실패해도 신고 접수(`200`) 자체는 성공한다 — 발송에는 서버 환경변수 `RESEND_API_KEY`가 필요하다.
 
 ## POST /api/mileage/coupon
 

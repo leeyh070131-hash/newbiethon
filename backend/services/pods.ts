@@ -62,6 +62,7 @@ export async function toClientPod(pod: PodDoc): Promise<ClientPod> {
 
 export interface CreatePodInput {
   departureStationId: string;
+  departureExit: string | null;
   arrivalStationId: string;
   departureTime: string; // ISO 8601
   maxParticipants: number;
@@ -83,11 +84,19 @@ function computePricePerPerson(totalPrice: number, participantCount: number): nu
 }
 
 async function validateCreatePodInput(input: Record<string, unknown>): Promise<CreatePodInput> {
-  const { departureStationId, arrivalStationId, departureTime, maxParticipants, minParticipants, totalPrice } =
+  const { departureStationId, departureExit, arrivalStationId, departureTime, maxParticipants, minParticipants, totalPrice } =
     input;
 
   if (typeof departureStationId !== "string" || departureStationId.trim().length === 0) {
     throw new ValidationError("departureStationId는 필수입니다.");
+  }
+  if (departureExit !== undefined && departureExit !== null && typeof departureExit !== "string") {
+    throw new ValidationError("departureExit은 문자열이어야 합니다.");
+  }
+  const trimmedExit =
+    typeof departureExit === "string" && departureExit.trim().length > 0 ? departureExit.trim() : null;
+  if (trimmedExit && trimmedExit.length > 12) {
+    throw new ValidationError("departureExit은 12자 이하로 입력해 주세요.");
   }
   if (typeof arrivalStationId !== "string" || arrivalStationId.trim().length === 0) {
     throw new ValidationError("arrivalStationId는 필수입니다.");
@@ -119,9 +128,13 @@ async function validateCreatePodInput(input: Record<string, unknown>): Promise<C
   ]);
   if (!departureStation) throw new ValidationError("departureStationId에 해당하는 정류장/역이 없습니다.");
   if (!arrivalStation) throw new ValidationError("arrivalStationId에 해당하는 정류장/역이 없습니다.");
+  if (trimmedExit && departureStation.type !== "subway") {
+    throw new ValidationError("출구 번호는 출발지가 지하철역일 때만 입력할 수 있습니다.");
+  }
 
   return {
     departureStationId,
+    departureExit: trimmedExit,
     arrivalStationId,
     departureTime,
     maxParticipants,
@@ -144,6 +157,7 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     hostUid,
     gender: hostProfile.gender, // FR-9
     departureStationId: validated.departureStationId,
+    departureExit: validated.departureExit,
     arrivalStationId: validated.arrivalStationId,
     departureTime: Timestamp.fromDate(new Date(validated.departureTime)),
     maxParticipants: validated.maxParticipants,

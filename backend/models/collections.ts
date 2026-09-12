@@ -3,6 +3,7 @@ export const COLLECTIONS = {
   users: "users",
   stations: "stations",
   pods: "pods",
+  reports: "reports",
 } as const;
 
 /** users/{uid} 아래의 마일리지 거래 내역 서브컬렉션 경로. */

@@ -9,6 +9,12 @@ export interface PendingNotice {
   createdAt: Timestamp;
 }
 
+/** 일일 신고 횟수 제한 카운터. date는 "YYYY-MM-DD"(Asia/Seoul 기준) 문자열. */
+export interface ReportQuota {
+  date: string;
+  count: number;
+}
+
 /**
  * users/{uid} 문서.
  * name/gender/bankAccount는 FR-3에 따라 본인이 직접 수정(PATCH /api/profile)하지 않는 한 절대 변경되지 않는다.
@@ -20,6 +26,7 @@ export interface UserDoc {
   bankAccount: string;
   mileageBalance: number;
   pendingNotice: PendingNotice | null;
+  reportQuota: ReportQuota | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

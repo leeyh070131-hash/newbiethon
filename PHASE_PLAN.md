@@ -24,7 +24,9 @@
 - Backend: ✅ `backend/services/pods.ts`의 `createPod`/`listPods`
   - ⚠️ Firestore 복합 인덱스(`firestore.indexes.json`)·보안 규칙(`firestore.rules`) 배포 필요 — `firebase deploy --only firestore:rules,firestore:indexes`
   - (2026-09-12) 호스트가 `pricePerPerson`을 직접 입력하던 방식에서 `totalPrice`(택시 총 금액) 입력 + 참가자 수 자동 N빵으로 변경. `joinPod`/`leavePod`에서 인원이 바뀔 때마다 `pricePerPerson` 재계산.
+  - (2026-09-12) `departureExit`(출구 번호, 선택) 추가 — 출발지가 지하철역일 때만 입력 가능하도록 검증.
 - Frontend: ✅ 팟 생성 폼, 메인화면 목록 + 위치 권한 요청/거부 처리
+  - (2026-09-12) 출발지로 지하철역을 고르면 출구 번호 입력란이 나타남. 목록/상세 화면에 "역이름 (N번 출구)"로 표시.
 
 ## Phase 1-D. 팟 참가/탈퇴
 - Backend: ✅ `joinPod`/`leavePod` (동성 필터, 정원마감, 호스트 탈퇴시 자동 폐지, 트랜잭션 처리)
@@ -49,7 +51,9 @@
 
 ## Phase 1-H. 팟 해지 & 정산 & 이력
 - Backend: ✅ `voteClose`(2026-09-12부터 호스트 단독 → 참가자 전원 동의 방식으로 변경, FR-27 참고)/`listHistory`/`listMyActivePods`, 마일리지 사용 내역(`backend/services/mileage.ts`의 `recordMileageTransaction`/`listMileageTransactions`, FR-17a)
+  - (2026-09-12) 사용자 신고(`backend/services/reports.ts`의 `reportUser`, FR-30) 추가 — 일일 3회 제한(`users/{uid}.reportQuota`), 접수 시 `reports` 컬렉션에 로그 + Resend API로 관리자 이메일 발송(`backend/lib/email.ts`).
 - Frontend: ✅ 도착 확인 버튼(전원 동의 방식), "내 팟" 탭(참여 중/이용 이력), 마일리지 탭 사용 내역, 정산 완료 시 전원에게 알림(토스트, 폴링 기반), "함께 갈 팟" 새로고침 버튼
+  - (2026-09-12) 이용 내역(종료된 팟) 참가자 목록에 "신고" 버튼 추가 — 사유는 간단히 prompt로 입력받음.
 - 의존: Phase 1-F (완료)
 
 ---
@@ -61,6 +65,7 @@
 - [ ] Firebase Authentication에서 Google 로그인 제공자 활성화 + 승인된 도메인에 배포 도메인 추가
 - [ ] Vercel 배포 후 크론(`/api/cron/check-departures`)이 5분 주기로 실제 도는지 확인 (Hobby 플랜 제한 가능성)
 - [ ] `npm run seed:stations` 1회 실행해 정류장 데이터 시딩
+- [ ] (2026-09-12 추가) [Resend](https://resend.com)에서 API 키 발급 후 Vercel 환경변수 `RESEND_API_KEY`로 등록 — 신고 접수 이메일(`leeyh070131@gmail.com`) 발송에 필요. 키가 없어도 신고 접수 자체는 되지만 이메일은 안 감.
 - [ ] (선택) 버스정류장 실제 공공데이터 키 확보 시 `backend/data/seongbuk-bus-stops-placeholder.json` 교체
 
 ## 알려진 한계 (다음 개선 대상)

@@ -12,7 +12,7 @@ import { firebaseConfigured, googleLogin, googleLogout, onAuthChange } from "@/f
 import {
   ApiError, chargeMileage, createPod, createProfile, dismissNotice, getHistory, getMileageTransactions,
   getMyActivePods, getPod, getProfile, getStations, joinPod, kickParticipant, leavePod, listPods,
-  redeemCoupon, updateProfile, voteClose,
+  redeemCoupon, reportUser, updateProfile, voteClose,
   voteConfirm, voteExtend,
 } from "@/frontend/lib/api";
 import type { ClientPod } from "@/backend/services/pods";
@@ -398,6 +398,7 @@ export default function TaxiApp() {
     try {
       const pod = await createPod({
         departureStationId: createFrom,
+        departureExit: String(data.get("exit") ?? "").trim() || null,
         arrivalStationId: createTo,
         departureTime: new Date(String(data.get("departure"))).toISOString(),
         maxParticipants: Number(data.get("max")),
@@ -1105,6 +1106,12 @@ export default function TaxiApp() {
                 onChange={setCreateFrom}
                 stations={stations}
               />
+              {stationById.get(createFrom)?.type === "subway" && (
+                <label>
+                  출구 번호 (선택)
+                  <input name="exit" placeholder="예: 2" maxLength={12} />
+                </label>
+              )}
               <StationCombobox
                 id="create-to"
                 label="도착지"
@@ -1283,7 +1290,10 @@ export default function TaxiApp() {
                 <span className="badge neutral">{genderLabel(selected.gender)} 팟</span>
               </div>
               <div className="detail-route">
-                <strong>{stationName(selected.departureStationId)}</strong>
+                <strong>
+                  {stationName(selected.departureStationId)}
+                  {selected.departureExit ? ` (${selected.departureExit}번 출구)` : ""}
+                </strong>
                 <ArrowRight size={20} />
                 <strong>{stationName(selected.arrivalStationId)}</strong>
               </div>
@@ -1315,6 +1325,9 @@ export default function TaxiApp() {
                   // 호스트는 모집중 상태에서, 아직 확정 동의(준비완료)를 안 한 참가자만 추방할 수 있다.
                   const canKick =
                     selected.status === "recruiting" && authUser?.uid === selected.hostUid && m.uid !== selected.hostUid && !done;
+                  // 이용 내역(종료된 팟)에서는 함께했던 다른 사람을 신고할 수 있다.
+                  const canReport =
+                    (selected.status === "closed" || selected.status === "dissolved") && m.uid !== authUser?.uid;
                   return (
                     <li key={m.uid}>
                       <span className="avatar mini">{m.name.slice(0, 1)}</span>
@@ -1340,6 +1353,28 @@ export default function TaxiApp() {
                             }}
                           >
                             추방
+                          </button>
+                        ) : canReport ? (
+                          <button
+                            type="button"
+                            className="kick-button"
+                            disabled={busy}
+                            onClick={async () => {
+                              const reason = window.prompt(`${m.name}님을 신고하는 사유를 입력해 주세요.`);
+                              if (!reason || !reason.trim()) return;
+                              setBusy(true);
+                              setError("");
+                              try {
+                                await reportUser(selected.id, m.uid, reason.trim());
+                                setNotice("신고가 접수됐어요.");
+                              } catch (e) {
+                                setError(errorMessage(e));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            신고
                           </button>
                         ) : (
                           <>
@@ -1644,7 +1679,10 @@ function PodCard({
       <div className="card-route">
         <div>
           <i className="route-dot" />
-          <strong>{stationName(p.departureStationId)}</strong>
+          <strong>
+            {stationName(p.departureStationId)}
+            {p.departureExit ? ` (${p.departureExit}번 출구)` : ""}
+          </strong>
         </div>
         <div>
           <MapPin size={15} />

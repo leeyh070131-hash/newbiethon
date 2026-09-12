@@ -56,6 +56,7 @@ export async function createProfile(uid: string, input: Record<string, unknown>)
     bankAccount: bankAccount.trim(),
     mileageBalance: 0,
     pendingNotice: null,
+    reportQuota: null,
     createdAt: now,
     updatedAt: now,
   };

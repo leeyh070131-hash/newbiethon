@@ -66,6 +66,7 @@ export async function listPods(location?: { lat: number; lng: number }): Promise
 }
 export async function createPod(input: {
   departureStationId: string;
+  departureExit: string | null;
   arrivalStationId: string;
   departureTime: string;
   maxParticipants: number;
@@ -87,6 +88,9 @@ export async function kickParticipant(id: string, targetUid: string): Promise<Cl
   return (
     await request<{ pod: ClientPod }>(`/api/pods/${id}/kick`, { method: "POST", body: JSON.stringify({ targetUid }) })
   ).pod;
+}
+export async function reportUser(id: string, targetUid: string, reason: string): Promise<void> {
+  await request(`/api/pods/${id}/report`, { method: "POST", body: JSON.stringify({ targetUid, reason }) });
 }
 export async function voteConfirm(id: string): Promise<ClientPod> {
   return (await request<{ pod: ClientPod }>(`/api/pods/${id}/vote`, { method: "POST" })).pod;
