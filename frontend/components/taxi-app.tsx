@@ -1458,30 +1458,62 @@ function StationCombobox({
 }) {
   const selectedName = stations.find((s) => s.id === value)?.name ?? "";
   const [text, setText] = useState(selectedName);
+  const [open, setOpen] = useState(false);
   useEffect(() => setText(selectedName), [selectedName]);
-  const listId = `${id}-list`;
 
+  const query = text.trim();
+  const matches = query ? stations.filter((s) => s.name.includes(query)) : stations;
+
+  function select(station: StationDoc) {
+    setText(station.name);
+    onChange(station.id);
+    setOpen(false);
+  }
+
+  // 네이티브 <input list>+<datalist>는 모바일 브라우저(특히 안드로이드)에서 앱 디자인과
+  // 안 맞는 시스템 목록으로 렌더링되고 화면을 뒤덮어버려서, 직접 그리는 드롭다운으로 바꿨다.
   const inputAndList = (
-    <>
+    <div className="combobox">
       <input
         id={id}
-        list={listId}
         value={text}
         placeholder={placeholder}
         autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
         onChange={(e) => {
           const typed = e.target.value;
           setText(typed);
+          setOpen(true);
           const match = stations.find((s) => s.name === typed);
           onChange(match ? match.id : "");
         }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+          } else if (e.key === "Enter" && open && matches.length > 0) {
+            // 폼 안에서 Enter가 그대로 제출되지 않도록, 첫 번째 후보를 선택한다.
+            e.preventDefault();
+            select(matches[0]);
+          }
+        }}
       />
-      <datalist id={listId}>
-        {stations.map((s) => (
-          <option key={s.id} value={s.name} />
-        ))}
-      </datalist>
-    </>
+      {open && (
+        <ul className="combobox-list">
+          {matches.length > 0 ? (
+            matches.map((s) => (
+              <li key={s.id}>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => select(s)}>
+                  {s.name}
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="combobox-empty">일치하는 정류장·역이 없어요</li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 
   if (wrapInSearchField) {
