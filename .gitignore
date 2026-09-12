@@ -4,6 +4,7 @@ node_modules/
 .env.local
 .vercel
 .omc/
+.claude/scheduled_tasks.lock
 next-env.d.ts
 *.tsbuildinfo
 

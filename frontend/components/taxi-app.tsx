@@ -149,8 +149,10 @@ export default function TaxiApp() {
   }, [authUser, profileChecked, profile, overlay]);
 
   useEffect(() => {
-    refreshExplore();
-  }, [refreshExplore]);
+    // authUser가 undefined인 동안(Firebase 세션 복원 전)에는 아직 로그인 여부를 모른다.
+    // 이때 바로 호출하면 401로 조용히 실패하고 이후 재시도가 없어 목록이 계속 비어 보인다.
+    if (authUser) refreshExplore();
+  }, [authUser, refreshExplore]);
   useEffect(() => {
     if (tab === "mine" && authUser) refreshMine();
   }, [tab, authUser, refreshMine]);
