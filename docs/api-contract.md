@@ -315,3 +315,32 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-24/AC-8: 참가자 전원이 `agree: true`를 보내면 `departureTime`이 30분 뒤로 연장되고 `awaitingExtension`이 `false`로 돌아가며, 다음 라운드를 위해 전원의 `votedExtend`가 초기화된다(`votedConfirm`은 그대로 유지).
 - FR-26: 이 시점까지는 마일리지 차감이 없었으므로(미확정 상태) 폐지되어도 환불 처리가 필요 없다.
 - `400`: 본인이 참가자가 아니거나 `agree`가 boolean이 아님. `404`: 팟이 없음.
+
+## POST /api/pods/:id/close
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+본문 없음
+
+### Response
+```json
+{ "pod": "해지 반영 후 pod. status가 \"closed\"" }
+```
+
+### 비고
+- FR-27/AC-11: 호스트만 호출 가능(`403` — 그 외엔 "호스트만 팟을 해지할 수 있습니다."). 팟이 `confirmed` 상태일 때만 해지 가능(`409`).
+- FR-28: 해지 즉시 `escrowTotal` 전액이 호스트의 `mileageBalance`에 지급된다.
+- `404`: 팟이 없거나 호스트 본인 프로필이 없음.
+
+## GET /api/history
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+
+### Response
+```json
+{ "pods": ["본인이 참가했던 팟 중 status가 \"closed\" 또는 \"dissolved\"인 것들, 최신순(updatedAt desc)"] }
+```
+
+### 비고
+- FR-29: 해지(`closed`)·폐지(`dissolved`) 기록 모두 포함. 확정 전 스스로 탈퇴해 `participantUids`에서 빠진 사람은 그 팟이 나중에 폐지/해지되어도 이력에 나타나지 않는다(탈퇴 시점에 관계가 끝난 것으로 취급).

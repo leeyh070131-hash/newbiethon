@@ -32,6 +32,10 @@ export interface PodDoc {
   pricePerPerson: number; // 인당예상가격
   status: PodStatus;
   participants: PodParticipant[];
+  // participants의 uid만 뽑아 동기화해둔 배열. Firestore는 객체 배열 안의 필드로
+  // 직접 쿼리할 수 없어서, "이 uid가 참가자인 팟 목록"(FR-29 이력 조회)을
+  // array-contains로 조회하기 위한 용도로만 존재한다. participants 갱신 시 항상 함께 갱신한다.
+  participantUids: string[];
   escrowTotal: number; // FR-20: 확정 시 차감된 마일리지 합계 보관
   awaitingExtension: boolean; // FR-23: 출발시간 도달 & 미확정 상태 → 연장 동의 팝업 대상인지
   createdAt: Timestamp;

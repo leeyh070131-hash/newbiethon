@@ -100,6 +100,7 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     pricePerPerson: validated.pricePerPerson,
     status: "recruiting",
     participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false }],
+    participantUids: [hostUid],
     escrowTotal: 0,
     awaitingExtension: false,
     createdAt: now,
@@ -173,11 +174,57 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
     const updated: PodDoc = {
       ...pod,
       participants: [...pod.participants, { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false }],
+      participantUids: [...pod.participantUids, uid],
       updatedAt: Timestamp.now(),
     };
     tx.set(ref, updated);
     return updated;
   });
+}
+
+/** FR-27/FR-28/AC-11: 호스트가 확정된 팟을 해지하면 에스크로 전액이 호스트에게 지급된다. */
+export async function closePod(uid: string, podId: string): Promise<PodDoc> {
+  const db = getAdminDb();
+  const podRef = db.collection(COLLECTIONS.pods).doc(podId);
+  const hostUserRef = db.collection(COLLECTIONS.users).doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [podSnapshot, hostSnapshot] = await Promise.all([tx.get(podRef), tx.get(hostUserRef)]);
+    if (!podSnapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    const pod = podSnapshot.data() as PodDoc;
+
+    if (uid !== pod.hostUid) {
+      throw new ForbiddenError("호스트만 팟을 해지할 수 있습니다.");
+    }
+    if (pod.status !== "confirmed") {
+      throw new ConflictError("확정된 팟만 해지할 수 있습니다.");
+    }
+    if (!hostSnapshot.exists) throw new NotFoundError("프로필이 아직 생성되지 않았습니다.");
+    const host = hostSnapshot.data() as UserDoc;
+
+    const now = Timestamp.now();
+    tx.set(hostUserRef, { ...host, mileageBalance: host.mileageBalance + pod.escrowTotal, updatedAt: now });
+
+    const updatedPod: PodDoc = { ...pod, status: "closed", updatedAt: now };
+    tx.set(podRef, updatedPod);
+    return updatedPod;
+  });
+}
+
+/**
+ * FR-29: 본인이 참가했던 팟 중 해지·폐지로 종료된 것들의 이력. 최신순.
+ * participantUids로 array-contains 조회 후, status 필터는 인덱스 부담 없이 메모리에서 처리한다.
+ */
+export async function listHistory(uid: string): Promise<PodDoc[]> {
+  const snapshot = await getAdminDb()
+    .collection(COLLECTIONS.pods)
+    .where("participantUids", "array-contains", uid)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => doc.data() as PodDoc)
+    .filter((pod) => pod.status === "closed" || pod.status === "dissolved")
+    .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis());
 }
 
 export async function getPodById(podId: string): Promise<PodDoc> {
@@ -214,6 +261,7 @@ export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
       updated = {
         ...pod,
         participants: pod.participants.filter((p) => p.uid !== uid),
+        participantUids: pod.participantUids.filter((participantUid) => participantUid !== uid),
         updatedAt: Timestamp.now(),
       };
     }

@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-G (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-H (백엔드 완료 — Phase 1 백엔드 전체 완료, 프론트엔드 전 단계 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -58,8 +58,16 @@
 - 의존: Phase 1-F 완료 필요 (완료됨)
 
 ## Phase 1-H. 팟 해지 & 정산 & 이력
-- Backend: 호스트 해지 API → 에스크로 전액 호스트 지급 (FR-27, FR-28), 해지/폐지 이력 기록·조회 (FR-29)
-- Frontend: 해지 버튼(호스트 전용), 이력 페이지
-- 예정 API: `POST /api/pods/:id/close`, `GET /api/history`
-- 검증: AC-11
-- 의존: Phase 1-F 완료 필요 (G와 병렬 가능)
+- Backend: ✅ 호스트 해지 API → 에스크로 전액 호스트 지급 (FR-27, FR-28), 해지/폐지 이력 조회 (FR-29) — `backend/services/pods.ts`의 `closePod`/`listHistory`
+- Frontend: ⬜ 해지 버튼(호스트 전용), 이력 페이지 — Codex 담당, 미착수
+- 예정 API: `POST /api/pods/:id/close`, `GET /api/history` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-11 (프론트 완료 후 end-to-end 확인 가능)
+- 의존: Phase 1-F 완료 필요 (완료됨)
+
+---
+
+**Phase 1 백엔드 요약**: FR-1~FR-29 전체 백엔드 구현 완료 (`backend/`, `app/api/**`). 남은 건 프론트엔드(Codex, `frontend/`)와 다음 배포/운영 확인 항목뿐:
+- Firebase Client SDK 설정 + Google 로그인 UI (Phase 1-A)
+- `firebase deploy --only firestore:rules,firestore:indexes` 실행 (Phase 1-C에서 추가된 규칙/인덱스)
+- Vercel에 `CRON_SECRET` 환경변수 등록 + 크론 5분 주기 실제 동작 확인 (Phase 1-G)
+- 버스정류장 실제 공공데이터 키 확보 시 placeholder 교체 (Phase 1-A, 선택)
