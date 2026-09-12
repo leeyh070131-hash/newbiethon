@@ -13,9 +13,11 @@ FR-5는 버스정류장도 포함해야 하지만, 정확한 목록은 공공데
 - 정류장 이름·좌표 모두 실제 버스정류장 데이터가 아니라 근사 추정치다. 데모/개발 진행용일 뿐, 공식 데이터로 취급하면 안 된다.
 - 파일명에 `placeholder`를 명시해 실수로 실데이터처럼 쓰이는 걸 방지했다.
 
+**⚠️ 확인된 사실 (2026-09-12):** 서울 열린데이터광장(data.seoul.go.kr) 일반 API 키로는 버스정류소 데이터를 가져올 수 없다. 버스정류소 API(`getStationByName` 등)는 실제로 별도 시스템인 `api.bus.go.kr`(TOPIS)에서 서비스되며, 완전히 다른 키 체계를 쓴다. 서울 열린데이터광장에서 발급받은 키를 이 API에 넣으면 `유효하지 않은 서비스키` 401 에러가 난다 (실제로 curl 테스트로 확인함). 서울 열린데이터광장 키는 그 사이트가 직접 호스팅하는 다른 데이터셋(예: 따릉이 대여소 정보)에는 정상 동작한다.
+
 **API 키를 받으면 할 일:**
-1. data.seoul.go.kr(권장, 승인 빠름) 또는 data.go.kr에서 버스정류장 위치정보 API 인증키를 발급받는다.
-2. `.env.local`에 `SEOUL_OPENAPI_KEY`를 설정한다.
-3. `backend/scripts/seed-stations.ts`에 실제 API fetch 로직을 추가해 성북구로 필터링하고, `seongbuk-bus-stops-placeholder.json`을 실제 데이터 파일로 교체한다.
+1. **공공데이터포털(data.go.kr)**에서 "서울특별시_정류소정보조회 서비스"(또는 유사한 정류소 조회 서비스)를 별도로 신청한다 — data.seoul.go.kr 키와는 다른 키다.
+2. `.env.local`에 `DATA_GO_KR_SERVICE_KEY`(가칭)로 설정한다.
+3. `backend/scripts/seed-stations.ts`에 `http://ws.bus.go.kr/api/rest/stationinfo/getStationByName` 계열 API fetch 로직을 추가해 성북구로 필터링하고, `seongbuk-bus-stops-placeholder.json`을 실제 데이터 파일로 교체한다.
 
 키를 받으면 알려주시면 이어서 구현하겠습니다.
