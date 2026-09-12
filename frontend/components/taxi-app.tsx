@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import {
-  ArrowDownUp, ArrowRight, Check, ChevronDown, ChevronRight, Clock3, Compass, CreditCard, History,
-  Leaf, LocateFixed, LogOut, MapPin, Moon, Plus, RefreshCw, Search, ShieldCheck, Sparkles, Ticket,
-  TrainFront, Users, Wallet, X,
+  ArrowDownUp, ArrowRight, CarTaxiFront, Check, ChevronDown, ChevronRight, Clock3, Compass, CreditCard,
+  History, Leaf, LocateFixed, LogOut, MapPin, Moon, Plus, RefreshCw, Search, ShieldCheck, Sparkles,
+  Ticket, TrainFront, Users, Wallet, X,
 } from "lucide-react";
 import Modal from "./modal";
 import { firebaseConfigured, googleLogin, googleLogout, onAuthChange } from "@/frontend/lib/firebase";
@@ -1219,9 +1219,20 @@ export default function TaxiApp() {
                 </div>
               </div>
               <div className="info-panel">
+                <CarTaxiFront />
+                <div>
+                  <h3>4. 확정되면 호스트가 택시 호출</h3>
+                  <p>
+                    <b>확정(전원 동의) 전에 택시를 부르면 안 돼요.</b> 아직 인원이 다 안 모였거나 연장 동의가 실패하면
+                    팟이 폐지될 수 있어서, 그 전에 부른 택시는 헛걸음이 될 수 있어요. 팟이 확정된 뒤, 출발시간 또는 그
+                    이후에 도착하도록 호스트가 택시를 호출해 주세요.
+                  </p>
+                </div>
+              </div>
+              <div className="info-panel">
                 <Wallet />
                 <div>
-                  <h3>4. 도착 후 전원 확인하면 정산</h3>
+                  <h3>5. 도착 후 전원 확인하면 정산</h3>
                   <p>
                     참가자 전원이 도착을 확인하면 보관한 포인트 전액이 호스트에게 지급되고 모두에게 알림이 떠요. 확정
                     후에는 탈퇴나 노쇼 환불이 불가능해요.
