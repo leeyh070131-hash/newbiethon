@@ -18,6 +18,10 @@ npm run seed:stations
 
 `.env.local`에 Firebase Admin 환경변수(`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`)가 필요하다. 현재는 지하철역만 채워진다 — `backend/data/README.md` 참고.
 
+## Google 로그인 설정 (프론트엔드)
+
+`.env.local`에 `NEXT_PUBLIC_FIREBASE_API_KEY`/`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`/`NEXT_PUBLIC_FIREBASE_PROJECT_ID`/`NEXT_PUBLIC_FIREBASE_APP_ID`를 채운다(Firebase 콘솔 > 프로젝트 설정 > 일반 > 내 앱). Firebase Authentication에서 Google 제공자를 활성화하고, 로컬(`localhost`)과 배포 도메인을 승인된 도메인에 추가해야 로그인이 동작한다. 자세한 화면 구성은 `frontend/README.md` 참고.
+
 ## 출발시간 임박 처리 크론 (Phase 1-G)
 
 `app/api/cron/check-departures`를 `vercel.json`에 등록된 스케줄(5분마다)로 Vercel Cron이 호출해 출발시간이 지난 미확정 팟을 연장 동의 대상으로 표시한다(FR-23).

@@ -14,6 +14,49 @@ import { getStationById, getStationsByIds } from "./stations";
 import type { PodDoc } from "../models/pod";
 import type { UserDoc } from "../models/user";
 
+export interface ClientPodParticipant {
+  uid: string;
+  name: string; // users 컬렉션에서 조회한 표시용 이름(공개 가능한 필드만). 계좌·마일리지 등은 노출하지 않는다.
+  joinedAt: string;
+  votedConfirm: boolean;
+  votedExtend: boolean;
+}
+
+export interface ClientPod extends Omit<PodDoc, "participants" | "departureTime" | "createdAt" | "updatedAt"> {
+  participants: ClientPodParticipant[];
+  departureTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * API 응답 변환. (1) Firestore Timestamp를 ISO 8601 문자열로 바꾸고,
+ * (2) 참가자 uid마다 표시용 이름을 붙인다(다른 사람의 계좌/잔액 등 민감 정보는 붙이지 않음).
+ * 실제 데이터는 여전히 users 컬렉션이 단일 출처이며, 이 함수는 응답 시점에만 join한다.
+ */
+export async function toClientPod(pod: PodDoc): Promise<ClientPod> {
+  const db = getAdminDb();
+  const refs = pod.participantUids.map((uid) => db.collection(COLLECTIONS.users).doc(uid));
+  const snapshots = refs.length > 0 ? await db.getAll(...refs) : [];
+  const namesByUid = new Map(
+    snapshots.map((snapshot) => [snapshot.id, snapshot.exists ? (snapshot.data() as UserDoc).name : "알 수 없음"])
+  );
+
+  return {
+    ...pod,
+    departureTime: pod.departureTime.toDate().toISOString(),
+    createdAt: pod.createdAt.toDate().toISOString(),
+    updatedAt: pod.updatedAt.toDate().toISOString(),
+    participants: pod.participants.map((p) => ({
+      uid: p.uid,
+      name: namesByUid.get(p.uid) ?? "알 수 없음",
+      joinedAt: p.joinedAt.toDate().toISOString(),
+      votedConfirm: p.votedConfirm,
+      votedExtend: p.votedExtend,
+    })),
+  };
+}
+
 export interface CreatePodInput {
   departureStationId: string;
   arrivalStationId: string;
@@ -225,6 +268,22 @@ export async function listHistory(uid: string): Promise<PodDoc[]> {
     .map((doc) => doc.data() as PodDoc)
     .filter((pod) => pod.status === "closed" || pod.status === "dissolved")
     .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis());
+}
+
+/**
+ * 본인이 참가 중인 팟(모집중/확정, 아직 종료 전) 목록. "내 팟" 화면에서 사용한다.
+ * GET /api/pods(모집중인 전체 목록)는 확정된 팟을 빼버리기 때문에 별도로 필요하다.
+ */
+export async function listMyActivePods(uid: string): Promise<PodDoc[]> {
+  const snapshot = await getAdminDb()
+    .collection(COLLECTIONS.pods)
+    .where("participantUids", "array-contains", uid)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => doc.data() as PodDoc)
+    .filter((pod) => pod.status === "recruiting" || pod.status === "confirmed")
+    .sort((a, b) => a.departureTime.toMillis() - b.departureTime.toMillis());
 }
 
 export async function getPodById(podId: string): Promise<PodDoc> {

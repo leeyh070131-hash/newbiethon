@@ -2,6 +2,8 @@
 
 frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. 갱신 규칙은 루트 `AGENTS.md`를 참고한다. 단계별 예정 엔드포인트 목록은 `PHASE_PLAN.md`에 있다 — 여기는 실제로 구현된 계약만 기록한다.
 
+> **2026-09-12 계약 변경**: 모든 응답에서 Firestore `Timestamp` 필드(`createdAt`/`updatedAt`/`departureTime`/참가자의 `joinedAt`)는 **ISO 8601 문자열**로 내려간다(예: `"2026-09-12T13:00:00.000Z"`). 또한 팟 응답의 `participants` 배열 각 항목에 다른 사용자에게 공개해도 되는 `name`(표시용 이름)이 추가됐다 — 계좌·마일리지 등 민감 정보는 여전히 본인 것만(`GET /api/profile`) 조회 가능하다. 아래 각 섹션은 이 형태를 반영해 갱신했다.
+
 엔드포인트마다 아래 형식으로 추가한다.
 
 <!--
@@ -60,8 +62,8 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "gender": "\"male\" | \"female\"",
     "bankAccount": "string",
     "mileageBalance": "number",
-    "createdAt": "Firestore Timestamp",
-    "updatedAt": "Firestore Timestamp"
+    "createdAt": "string (ISO 8601)",
+    "updatedAt": "string (ISO 8601)"
   }
 }
 ```
@@ -131,15 +133,17 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "gender": "\"male\" | \"female\" — 호스트 등록 성별로 자동 설정 (FR-9)",
     "departureStationId": "string",
     "arrivalStationId": "string",
-    "departureTime": "Firestore Timestamp",
+    "departureTime": "string (ISO 8601)",
     "maxParticipants": "number",
     "minParticipants": "number",
     "pricePerPerson": "number",
     "status": "\"recruiting\"",
-    "participants": [{ "uid": "string", "joinedAt": "Timestamp", "votedConfirm": "boolean" }],
+    "participants": [{ "uid": "string", "name": "string", "joinedAt": "string (ISO 8601)", "votedConfirm": "boolean", "votedExtend": "boolean" }],
+    "participantUids": "string[] — participants의 uid만 뽑은 배열(내부 조회용, 프론트는 참고만)",
     "escrowTotal": "number — 생성 시 0",
-    "createdAt": "Timestamp",
-    "updatedAt": "Timestamp"
+    "awaitingExtension": "boolean — 생성 시 false",
+    "createdAt": "string (ISO 8601)",
+    "updatedAt": "string (ISO 8601)"
   }
 }
 ```
@@ -166,6 +170,20 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-14a: `lat`/`lng`가 없거나 숫자가 아니면 최신 생성순(`createdAt` desc)으로 정렬.
 - 확정(`confirmed`)·폐지(`dissolved`)·해지(`closed`) 상태 팟은 포함되지 않는다.
 - 이 쿼리는 Firestore 복합 인덱스가 필요하다 — `firestore.indexes.json` 참고, `firebase deploy --only firestore:indexes`로 배포.
+
+## GET /api/pods/mine
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+
+### Response
+```json
+{ "pods": ["POST /api/pods 응답의 pod와 동일한 형태 배열, status가 \"recruiting\" 또는 \"confirmed\"인 것만, 출발시간 임박순"] }
+```
+
+### 비고
+- "내 팟 > 참여 중" 화면용. `GET /api/pods`는 모집중인 팟만 보여주고 확정된 팟은 빠지기 때문에, 본인이 참가한 팟을 상태와 무관하게(참여 중인 것만) 보여주려면 이 엔드포인트가 필요하다.
+- 종료된(해지/폐지) 팟은 `GET /api/history`를 사용한다.
 
 ## POST /api/pods/:id/join
 

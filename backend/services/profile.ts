@@ -95,3 +95,13 @@ export async function updateProfile(uid: string, input: Record<string, unknown>)
   await ref.update(updates);
   return { ...(existing.data() as UserDoc), ...updates };
 }
+
+export interface ClientUser extends Omit<UserDoc, "createdAt" | "updatedAt"> {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** API 응답 변환: Firestore Timestamp를 ISO 8601 문자열로 바꾼다. */
+export function toClientUser(user: UserDoc): ClientUser {
+  return { ...user, createdAt: user.createdAt.toDate().toISOString(), updatedAt: user.updatedAt.toDate().toISOString() };
+}

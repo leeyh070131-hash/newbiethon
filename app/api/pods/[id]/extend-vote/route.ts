@@ -2,7 +2,7 @@
 import { requireAuth } from "@/backend/lib/auth";
 import { toErrorResponse, ValidationError } from "@/backend/lib/http-errors";
 import { parseJsonBody } from "@/backend/lib/http";
-import { voteExtend } from "@/backend/services/pods";
+import { toClientPod, voteExtend } from "@/backend/services/pods";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw new ValidationError("agree(boolean)는 필수입니다.");
     }
     const pod = await voteExtend(uid, id, body.agree);
-    return Response.json({ pod });
+    return Response.json({ pod: await toClientPod(pod) });
   } catch (error) {
     return toErrorResponse(error);
   }
