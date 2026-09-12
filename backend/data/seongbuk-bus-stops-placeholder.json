@@ -1,0 +1,10 @@
+[
+  { "id": "bus-seongbuk-guchung", "name": "성북구청", "type": "bus", "district": "성북구", "lat": 37.5894, "lng": 127.0167 },
+  { "id": "bus-seongbuk-police", "name": "성북경찰서", "type": "bus", "district": "성북구", "lat": 37.5936, "lng": 127.0037 },
+  { "id": "bus-jeongneung-market", "name": "정릉시장", "type": "bus", "district": "성북구", "lat": 37.6034, "lng": 127.0095 },
+  { "id": "bus-jangwidong", "name": "장위동주민센터", "type": "bus", "district": "성북구", "lat": 37.6086, "lng": 127.0562 },
+  { "id": "bus-seokgwandong", "name": "석관동", "type": "bus", "district": "성북구", "lat": 37.6122, "lng": 127.0577 },
+  { "id": "bus-samseondong", "name": "삼선동", "type": "bus", "district": "성북구", "lat": 37.5865, "lng": 127.0055 },
+  { "id": "bus-anam-ogeori", "name": "안암오거리", "type": "bus", "district": "성북구", "lat": 37.5845, "lng": 127.0287 },
+  { "id": "bus-wolgok-market", "name": "월곡시장", "type": "bus", "district": "성북구", "lat": 37.6019, "lng": 127.0413 }
+]
