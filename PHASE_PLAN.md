@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-D (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-E (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -37,10 +37,10 @@
 - 검증: AC-3, AC-4, AC-5, AC-5a (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-E. 마일리지
-- Backend: 쿠폰 충전 API(횟수 제한 없음) (FR-15), 계좌송금 Mock 충전 API (FR-16), 잔액 조회 API (FR-17)
-- Frontend: 쿠폰 입력 UI, 충전 UI, 잔액 표시
-- 예정 API: `POST /api/mileage/coupon`, `POST /api/mileage/charge`, `GET /api/mileage/balance`
-- 검증: AC-12
+- Backend: ✅ 쿠폰 충전 API(횟수 제한 없음) (FR-15), 계좌송금 Mock 충전 API (FR-16), 잔액 조회 API (FR-17) — `backend/services/mileage.ts`
+- Frontend: ⬜ 쿠폰 입력 UI, 충전 UI, 잔액 표시 — Codex 담당, 미착수
+- 예정 API: `POST /api/mileage/coupon`, `POST /api/mileage/charge`, `GET /api/mileage/balance` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-12 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-F. 확정 투표 & 에스크로
 - Backend: 최소인원 도달시 투표 오픈, 전원동의시 확정 (FR-18, FR-19), 잔액부족시 동의 차단 (FR-19a), 확정시 에스크로 차감 (FR-20), 대기상태 유지 (FR-21), 노쇼 환불 없음 정책 (FR-22)

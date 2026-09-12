@@ -201,3 +201,50 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-13a/AC-5a: 탈퇴하는 사람이 호스트(`hostUid`)면 팟 전체가 `dissolved`로 바뀐다(참가자 목록 자체는 기록으로 남지만 팟은 종료됨).
 - `409`: 팟이 이미 `recruiting`이 아님(확정/폐지/해지된 팟은 이 엔드포인트로 탈퇴 불가).
 - `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟이 없음.
+
+## POST /api/mileage/coupon
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{ "code": "string" }
+```
+
+### Response
+```json
+{ "mileageBalance": "number — 충전 후 잔액" }
+```
+
+### 비고
+- FR-15/AC-12: `code`가 정확히 `"피크닉"`이면 50,000 충전. 계정당 횟수 제한 없음(반복 사용 가능).
+- `400`: `code`가 없거나 `"피크닉"`이 아님. `404`: 프로필 없음(`POST /api/profile` 먼저 필요).
+
+## POST /api/mileage/charge
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+```json
+{ "amount": "number — 0보다 큰 정수" }
+```
+
+### Response
+```json
+{ "mileageBalance": "number — 충전 후 잔액" }
+```
+
+### 비고
+- FR-16: 계좌 송금 Mock. 실제 은행/PG 연동 없이 `amount`만큼 즉시 충전된다.
+- `400`: `amount`가 없거나 0 이하/정수가 아님. `404`: 프로필 없음.
+
+## GET /api/mileage/balance
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+
+### Response
+```json
+{ "mileageBalance": "number" }
+```
+
+### 비고
+- FR-17. `404`: 프로필 없음.
