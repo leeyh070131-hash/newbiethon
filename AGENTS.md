@@ -13,7 +13,15 @@
 - 인증: Firebase Authentication (Google 로그인)
 - DB: Firebase Firestore
 - `frontend/`: 페이지·컴포넌트·클라이언트 상태
-- `backend/`: API 라우트, Firebase Admin SDK, Firestore 접근 로직
+- `backend/`: API 라우트가 호출하는 실제 로직, Firebase Admin SDK, Firestore 접근
+
+### app/ 디렉터리 규칙
+
+Next.js는 라우팅에 `app/` 폴더가 필수라 `frontend/`·`backend/`처럼 완전히 분리할 수 없다. 대신 `app/` 안의 파일은 **얇은 라우팅 셸로만** 유지한다:
+
+- `app/api/**/route.ts`: `backend/services/*`의 함수를 호출만 하는 몇 줄짜리 파일. 실질 로직(검증, Firestore 접근)은 전부 `backend/`에 둔다. → 이 파일들은 **백엔드 담당자(Claude Code)** 소유.
+- `app/**/page.tsx`, `app/layout.tsx` 등 UI 라우트: 실질 컴포넌트는 `frontend/`에 두고 페이지 파일은 그걸 불러오기만 한다. → **프론트엔드 담당자(Codex)** 소유.
+- 즉 `app/` 자체는 공유 디렉터리이지만, 파일 단위로 소유자가 갈린다 — `app/api/`는 백엔드, 나머지는 프론트엔드가 만든다는 규칙만 지키면 실질적인 충돌은 거의 없다.
 
 ## 담당 구역
 

@@ -1,0 +1,14 @@
+[
+  { "id": "subway-gireum", "name": "길음역", "type": "subway", "district": "성북구", "lat": 37.6023, "lng": 127.0252 },
+  { "id": "subway-sungshin-univ", "name": "성신여대입구역", "type": "subway", "district": "성북구", "lat": 37.5926, "lng": 127.0161 },
+  { "id": "subway-hansung-univ", "name": "한성대입구역", "type": "subway", "district": "성북구", "lat": 37.5883, "lng": 127.0064 },
+  { "id": "subway-bomun", "name": "보문역", "type": "subway", "district": "성북구", "lat": 37.5859, "lng": 127.0175 },
+  { "id": "subway-anam", "name": "안암역", "type": "subway", "district": "성북구", "lat": 37.5862, "lng": 127.0296 },
+  { "id": "subway-korea-univ", "name": "고려대역", "type": "subway", "district": "성북구", "lat": 37.5896, "lng": 127.0326 },
+  { "id": "subway-wolgok", "name": "월곡역", "type": "subway", "district": "성북구", "lat": 37.6023, "lng": 127.0396 },
+  { "id": "subway-sangwolgok", "name": "상월곡역", "type": "subway", "district": "성북구", "lat": 37.6058, "lng": 127.0475 },
+  { "id": "subway-dolgoji", "name": "돌곶이역", "type": "subway", "district": "성북구", "lat": 37.6109, "lng": 127.0499 },
+  { "id": "subway-seokgye", "name": "석계역", "type": "subway", "district": "성북구", "lat": 37.6148, "lng": 127.0632 },
+  { "id": "subway-jeongneung", "name": "정릉역", "type": "subway", "district": "성북구", "lat": 37.6047, "lng": 127.0089 },
+  { "id": "subway-bukhansan-boguk", "name": "북한산보국문역", "type": "subway", "district": "성북구", "lat": 37.6108, "lng": 127.0053 }
+]

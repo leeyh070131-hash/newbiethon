@@ -4,17 +4,18 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-A (시작 전)**
+**현재 단계: Phase 1-A (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
 ---
 
 ## Phase 1-A. 기반 설정
-- Backend: Firebase Admin SDK 초기화, Firestore 데이터 모델 설계(User/Station/Pod), 성북구 정류장·역 데이터 시딩 (FR-5), ID 토큰 검증 미들웨어
-- Frontend: Firebase Client SDK 설정, Google 로그인 버튼/플로우 (FR-1)
-- 예정 API: `GET /api/stations`
-- 검증: 로그인 성공, 정류장 목록 조회 가능
+- Backend: ✅ Firebase Admin SDK 초기화(`backend/lib/firebase-admin.ts`), Firestore 데이터 모델 설계(User/Station/Pod, `backend/models/`), 지하철역 데이터 시딩(`backend/scripts/seed-stations.ts`), ID 토큰 검증 미들웨어(`backend/lib/auth.ts`), `GET /api/stations` 구현
+  - ⚠️ 버스정류장 시딩은 보류 — 공공데이터포털/서울 열린데이터광장 API 키 필요 (`backend/data/README.md` 참고). 키를 받으면 이어서 구현.
+- Frontend: ⬜ Firebase Client SDK 설정, Google 로그인 버튼/플로우 (FR-1) — Codex 담당, 미착수
+- 예정 API: `GET /api/stations` (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: 로그인 성공(프론트 완료 후 확인), 정류장 목록 조회 가능(지하철역만 — `npm run seed:stations` 실행 후 `GET /api/stations`로 확인 가능. Firebase 프로젝트/서비스 계정 키가 `.env.local`에 있어야 함)
 
 ## Phase 1-B. 사용자 프로필
 - Backend: 프로필 생성/수정 API, 본인 수정 전까지 불변 처리 (FR-2, FR-3)
