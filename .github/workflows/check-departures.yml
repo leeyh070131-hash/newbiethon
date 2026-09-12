@@ -1,0 +1,16 @@
+name: Check departures
+
+# Vercel Hobby 플랜은 하루 1회보다 잦은 Cron Job을 지원하지 않아(vercel.json 참고),
+# 5분 주기가 필요한 FR-23 출발시간 감지는 GitHub Actions로 대신 호출한다.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/check-departures
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/check-departures"
