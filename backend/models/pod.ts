@@ -30,7 +30,8 @@ export interface PodDoc {
   departureTime: Timestamp;
   maxParticipants: number; // 모집인원(최대 정원), FR-12
   minParticipants: number; // 참여최소인원, FR-10: maxParticipants보다 클 수 없음
-  pricePerPerson: number; // 인당예상가격
+  totalPrice: number; // 택시 총 금액 (호스트가 생성 시 입력, 이후 고정)
+  pricePerPerson: number; // 인당예상가격 = ceil(totalPrice / participants.length). 참가자 수가 바뀔 때마다(참가/탈퇴) 자동 재계산된다.
   status: PodStatus;
   participants: PodParticipant[];
   // participants의 uid만 뽑아 동기화해둔 배열. Firestore는 객체 배열 안의 필드로

@@ -119,7 +119,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
   "departureTime": "string — ISO 8601 날짜/시간",
   "maxParticipants": "number — 모집인원(최대 정원), 1 이상 정수",
   "minParticipants": "number — 참여최소인원, 1 이상 정수, maxParticipants 이하",
-  "pricePerPerson": "number — 인당예상가격, 0보다 큼"
+  "totalPrice": "number — 택시 총 금액(미터기 기준), 0보다 큼. (2026-09-12부터 pricePerPerson 대신 totalPrice를 받는다 — 브레이킹 체인지, 아래 비고 참고)"
 }
 ```
 
@@ -136,7 +136,8 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "departureTime": "string (ISO 8601)",
     "maxParticipants": "number",
     "minParticipants": "number",
-    "pricePerPerson": "number",
+    "totalPrice": "number — 생성 시 입력한 택시 총 금액, 이후 고정",
+    "pricePerPerson": "number — ceil(totalPrice / participants.length). 참가/탈퇴로 인원이 바뀔 때마다 자동 재계산됨",
     "status": "\"recruiting\"",
     "participants": [{ "uid": "string", "name": "string", "joinedAt": "string (ISO 8601)", "votedConfirm": "boolean", "votedExtend": "boolean", "votedClose": "boolean — FR-27 도착 확인 동의 여부, confirmed 상태일 때만 의미 있음" }],
     "participantUids": "string[] — participants의 uid만 뽑은 배열(내부 조회용, 프론트는 참고만)",
@@ -152,6 +153,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - FR-7: 생성자가 자동으로 호스트 겸 첫 참가자가 된다(참가자 배열에 본인 포함, votedConfirm은 아직 false).
 - FR-10/AC-2: `minParticipants > maxParticipants`이면 400.
 - 400: `departureStationId`/`arrivalStationId`가 `/api/stations`에 없는 id이거나 서로 같은 경우도 포함.
+- (2026-09-12 브레이킹 체인지) 호스트가 인당가격을 직접 입력하던 방식(`pricePerPerson`)에서, 택시 총 금액(`totalPrice`)을 입력하면 인당예상가격을 참가자 수로 자동 N빵(`ceil` 나눗셈) 하는 방식으로 바뀌었다. `pricePerPerson`은 이제 응답 전용 파생 필드이며, 참가(`POST /join`)·탈퇴(`DELETE /leave`)로 참가자 수가 바뀔 때마다 서버가 자동으로 다시 계산해 갱신한다. `totalPrice`는 생성 후 고정이며 바뀌지 않는다.
 - 404: 프로필을 아직 생성하지 않은 사용자 (`POST /api/profile` 먼저 필요, gender를 여기서 가져오므로 FR-9의 전제조건).
 
 ## GET /api/pods
@@ -202,6 +204,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 - `409`: 이미 참가한 팟에 다시 참가 시도, 또는 팟 상태가 `recruiting`이 아님(이미 확정/폐지/해지).
 - `404`: 팟이 없음, 또는 본인 프로필이 없음(`POST /api/profile` 먼저 필요).
 - 동시 참가로 정원 초과가 나지 않도록 서버에서 Firestore 트랜잭션으로 처리한다.
+- (2026-09-12 추가) 참가로 인원이 늘어나므로 `pricePerPerson`이 늘어난 인원 기준으로 자동 재계산된다(`totalPrice`는 불변).
 
 ## DELETE /api/pods/:id/leave
 
@@ -216,7 +219,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 
 ### 비고
 - FR-13/AC-5: 팟이 `recruiting` 상태일 때만 탈퇴 가능. 참가자가 탈퇴하면 `participants`에서 본인만 제거된다. 확정 전이라 마일리지 차감이 없으므로 환불 처리도 없다.
-- (2026-09-12 추가) 참가자가 탈퇴하면 남은 참가자 전원의 확정 투표(`votedConfirm`)가 초기화된다 — 인원 구성이 바뀌었으므로 확정 투표를 처음부터 다시 해야 한다.
+- (2026-09-12 추가) 참가자가 탈퇴하면 남은 참가자 전원의 확정 투표(`votedConfirm`)가 초기화된다 — 인원 구성이 바뀌었으므로 확정 투표를 처음부터 다시 해야 한다. 동시에 `pricePerPerson`도 줄어든 인원 기준으로 자동 재계산된다(`totalPrice`는 불변).
 - FR-13a/AC-5a: 탈퇴하는 사람이 호스트(`hostUid`)면 팟 전체가 `dissolved`로 바뀐다(참가자 목록 자체는 기록으로 남지만 팟은 종료됨).
 - `409`: 팟이 이미 `recruiting`이 아님(확정/폐지/해지된 팟은 이 엔드포인트로 탈퇴 불가).
 - `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟이 없음.

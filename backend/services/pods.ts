@@ -66,7 +66,7 @@ export interface CreatePodInput {
   departureTime: string; // ISO 8601
   maxParticipants: number;
   minParticipants: number;
-  pricePerPerson: number;
+  totalPrice: number;
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -77,8 +77,13 @@ function isPositiveNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+/** 인당예상가격 = 택시 총 금액을 현재 참가자 수만큼 올림 나눈 값. 총액을 항상 채우도록 올림한다. */
+function computePricePerPerson(totalPrice: number, participantCount: number): number {
+  return Math.ceil(totalPrice / participantCount);
+}
+
 async function validateCreatePodInput(input: Record<string, unknown>): Promise<CreatePodInput> {
-  const { departureStationId, arrivalStationId, departureTime, maxParticipants, minParticipants, pricePerPerson } =
+  const { departureStationId, arrivalStationId, departureTime, maxParticipants, minParticipants, totalPrice } =
     input;
 
   if (typeof departureStationId !== "string" || departureStationId.trim().length === 0) {
@@ -103,8 +108,8 @@ async function validateCreatePodInput(input: Record<string, unknown>): Promise<C
     // FR-10 / AC-2
     throw new ValidationError("참여최소인원은 모집인원(최대 정원)보다 클 수 없습니다.");
   }
-  if (!isPositiveNumber(pricePerPerson)) {
-    throw new ValidationError("pricePerPerson(인당예상가격)은 0보다 큰 숫자여야 합니다.");
+  if (!isPositiveNumber(totalPrice)) {
+    throw new ValidationError("totalPrice(택시 총 금액)는 0보다 큰 숫자여야 합니다.");
   }
 
   // FR-6: 출발지/도착지는 실제 등록된 정류장/역 중에서만 선택 가능
@@ -121,7 +126,7 @@ async function validateCreatePodInput(input: Record<string, unknown>): Promise<C
     departureTime,
     maxParticipants,
     minParticipants,
-    pricePerPerson,
+    totalPrice,
   };
 }
 
@@ -143,7 +148,8 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     departureTime: Timestamp.fromDate(new Date(validated.departureTime)),
     maxParticipants: validated.maxParticipants,
     minParticipants: validated.minParticipants,
-    pricePerPerson: validated.pricePerPerson,
+    totalPrice: validated.totalPrice,
+    pricePerPerson: computePricePerPerson(validated.totalPrice, 1), // 참가자는 아직 호스트 1명
     status: "recruiting",
     participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false, votedClose: false }],
     participantUids: [hostUid],
@@ -217,13 +223,16 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
       throw new ConflictError("모집 마감된 팟입니다.");
     }
 
+    const updatedParticipants = [
+      ...pod.participants,
+      { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false, votedClose: false },
+    ];
     const updated: PodDoc = {
       ...pod,
-      participants: [
-        ...pod.participants,
-        { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false, votedClose: false },
-      ],
+      participants: updatedParticipants,
       participantUids: [...pod.participantUids, uid],
+      // 인원이 늘었으니 인당예상가격을 다시 나눈다.
+      pricePerPerson: computePricePerPerson(pod.totalPrice, updatedParticipants.length),
       updatedAt: Timestamp.now(),
     };
     tx.set(ref, updated);
@@ -347,13 +356,16 @@ export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
       // FR-13a: 호스트 탈퇴 → 팟 자동 폐지. 참가자 목록은 기록으로 남긴다(FR-29 대비).
       updated = { ...pod, status: "dissolved", updatedAt: Timestamp.now() };
     } else {
-      // 참가자 구성이 바뀌므로, 남은 인원은 확정 투표를 처음부터 다시 해야 한다.
+      // 참가자 구성이 바뀌므로, 남은 인원은 확정 투표를 처음부터 다시 해야 하고
+      // 인당예상가격도 줄어든 인원 기준으로 다시 나눈다.
+      const remainingParticipants = pod.participants
+        .filter((p) => p.uid !== uid)
+        .map((p) => ({ ...p, votedConfirm: false }));
       updated = {
         ...pod,
-        participants: pod.participants
-          .filter((p) => p.uid !== uid)
-          .map((p) => ({ ...p, votedConfirm: false })),
+        participants: remainingParticipants,
         participantUids: pod.participantUids.filter((participantUid) => participantUid !== uid),
+        pricePerPerson: computePricePerPerson(pod.totalPrice, remainingParticipants.length),
         updatedAt: Timestamp.now(),
       };
     }

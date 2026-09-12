@@ -67,7 +67,7 @@ export async function createPod(input: {
   departureTime: string;
   maxParticipants: number;
   minParticipants: number;
-  pricePerPerson: number;
+  totalPrice: number;
 }): Promise<ClientPod> {
   return (await request<{ pod: ClientPod }>("/api/pods", { method: "POST", body: JSON.stringify(input) })).pod;
 }

@@ -380,7 +380,7 @@ export default function TaxiApp() {
         departureTime: new Date(String(data.get("departure"))).toISOString(),
         maxParticipants: Number(data.get("max")),
         minParticipants: Number(data.get("min")),
-        pricePerPerson: Number(data.get("price")),
+        totalPrice: Number(data.get("price")),
       });
       setNotice("함께 갈 팟을 만들었어요!");
       await refreshExplore();
@@ -1089,10 +1089,13 @@ export default function TaxiApp() {
                 </label>
               </div>
               <label>
-                인당예상가격 (P)
-                <input name="price" type="number" min="1" max="1000000" step="1" defaultValue="3500" required />
+                택시 총 금액 (P)
+                <input name="price" type="number" min="1" max="1000000" step="1" defaultValue="14000" required />
               </label>
-              <p className="form-hint">인원에는 호스트인 나도 포함돼요. 전원이 동의한 뒤 예상가격만큼 포인트가 보관돼요.</p>
+              <p className="form-hint">
+                택시 미터기에 찍히는 총 금액을 입력해 주세요. 인당예상가격은 참가 인원 수에 맞춰 자동으로 나눠 계산돼요(인원이
+                바뀌면 다시 계산돼요). 인원에는 호스트인 나도 포함돼요.
+              </p>
               <button className="primary full" type="submit" disabled={busy}>
                 <Plus size={18} />
                 팟 만들기
@@ -1223,7 +1226,7 @@ export default function TaxiApp() {
                 </span>
                 <span>
                   <Wallet size={16} />
-                  1인 <b>{money(selected.pricePerPerson)} P</b>
+                  1인 <b>{money(selected.pricePerPerson)} P</b> (총 {money(selected.totalPrice)} P)
                 </span>
               </div>
               <h3 className="participants-heading">

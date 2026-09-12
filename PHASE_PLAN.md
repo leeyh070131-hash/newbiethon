@@ -22,6 +22,7 @@
 ## Phase 1-C. 팟 생성 & 메인 목록
 - Backend: ✅ `backend/services/pods.ts`의 `createPod`/`listPods`
   - ⚠️ Firestore 복합 인덱스(`firestore.indexes.json`)·보안 규칙(`firestore.rules`) 배포 필요 — `firebase deploy --only firestore:rules,firestore:indexes`
+  - (2026-09-12) 호스트가 `pricePerPerson`을 직접 입력하던 방식에서 `totalPrice`(택시 총 금액) 입력 + 참가자 수 자동 N빵으로 변경. `joinPod`/`leavePod`에서 인원이 바뀔 때마다 `pricePerPerson` 재계산.
 - Frontend: ✅ 팟 생성 폼, 메인화면 목록 + 위치 권한 요청/거부 처리
 
 ## Phase 1-D. 팟 참가/탈퇴
