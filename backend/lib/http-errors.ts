@@ -32,6 +32,13 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+/** FR-19a: 마일리지 잔액 부족으로 확정 동의를 할 수 없을 때. */
+export class InsufficientFundsError extends HttpError {
+  constructor(message: string) {
+    super(402, message);
+  }
+}
+
 export class ConflictError extends HttpError {
   constructor(message: string) {
     super(409, message);

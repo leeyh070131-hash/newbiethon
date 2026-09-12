@@ -1,11 +1,18 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { COLLECTIONS } from "../models/collections";
 import { getAdminDb } from "../lib/firebase-admin";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/http-errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  InsufficientFundsError,
+  NotFoundError,
+  ValidationError,
+} from "../lib/http-errors";
 import { haversineDistanceMeters, type LatLng } from "../lib/geo";
 import { getProfile } from "./profile";
 import { getStationById, getStationsByIds } from "./stations";
 import type { PodDoc } from "../models/pod";
+import type { UserDoc } from "../models/user";
 
 export interface CreatePodInput {
   departureStationId: string;
@@ -172,6 +179,12 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
   });
 }
 
+export async function getPodById(podId: string): Promise<PodDoc> {
+  const doc = await getAdminDb().collection(COLLECTIONS.pods).doc(podId).get();
+  if (!doc.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+  return doc.data() as PodDoc;
+}
+
 /**
  * FR-13/FR-13a/AC-5/AC-5a: 확정 전(status === "recruiting")에만 탈퇴 가능.
  * 호스트가 탈퇴하면 팟 전체가 자동 폐지된다(마일리지 차감 전 상태라 환불 처리는 불필요).
@@ -205,5 +218,85 @@ export async function leavePod(uid: string, podId: string): Promise<PodDoc> {
     }
     tx.set(ref, updated);
     return updated;
+  });
+}
+
+/**
+ * FR-18~FR-22/AC-5b/AC-6/AC-7: 확정 투표. 호출한 본인의 동의만 기록하며, 그 결과
+ * 참가자 전원이 동의한 상태가 되면 그 자리에서 팟을 확정하고 전원의 마일리지를
+ * 에스크로로 차감한다.
+ */
+export async function voteConfirm(uid: string, podId: string): Promise<PodDoc> {
+  const db = getAdminDb();
+  const podRef = db.collection(COLLECTIONS.pods).doc(podId);
+  const userRef = db.collection(COLLECTIONS.users).doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [podSnapshot, userSnapshot] = await Promise.all([tx.get(podRef), tx.get(userRef)]);
+    if (!podSnapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
+    if (!userSnapshot.exists) throw new NotFoundError("프로필이 아직 생성되지 않았습니다.");
+
+    const pod = podSnapshot.data() as PodDoc;
+    const user = userSnapshot.data() as UserDoc;
+
+    if (pod.status !== "recruiting") {
+      throw new ConflictError("이미 확정되었거나 종료된 팟입니다.");
+    }
+    if (!pod.participants.some((p) => p.uid === uid)) {
+      throw new ValidationError("이 팟의 참가자가 아닙니다.");
+    }
+    if (pod.participants.length < pod.minParticipants) {
+      // FR-18: 참여최소인원 도달 전에는 투표 자체가 열리지 않는다.
+      throw new ConflictError("아직 참여최소인원에 도달하지 않아 투표할 수 없습니다.");
+    }
+    if (user.mileageBalance < pod.pricePerPerson) {
+      // FR-19a/AC-5b
+      throw new InsufficientFundsError("마일리지 잔액이 부족합니다. 충전 후 다시 시도하세요.");
+    }
+
+    const updatedParticipants = pod.participants.map((p) => (p.uid === uid ? { ...p, votedConfirm: true } : p));
+    const allConfirmed = updatedParticipants.every((p) => p.votedConfirm);
+
+    if (!allConfirmed) {
+      // FR-21/AC-7: 전원 동의 전까지는 "확정 대기" 상태로 투표 화면을 계속 연다.
+      const updated: PodDoc = { ...pod, participants: updatedParticipants, updatedAt: Timestamp.now() };
+      tx.set(podRef, updated);
+      return updated;
+    }
+
+    // 마지막 동의 — 확정 처리 전에 본인 외 참가자들의 잔액도 다시 한 번 확인한다.
+    // (각자 투표 시점엔 충분했더라도 그 사이 다른 팟 확정 등으로 잔액이 바뀌었을 수 있다.)
+    const otherUids = updatedParticipants.map((p) => p.uid).filter((participantUid) => participantUid !== uid);
+    const otherUserRefs = otherUids.map((participantUid) => db.collection(COLLECTIONS.users).doc(participantUid));
+    const otherUserSnapshots =
+      otherUserRefs.length > 0 ? await Promise.all(otherUserRefs.map((ref) => tx.get(ref))) : [];
+
+    for (const snapshot of otherUserSnapshots) {
+      if (!snapshot.exists || (snapshot.data() as UserDoc).mileageBalance < pod.pricePerPerson) {
+        throw new ConflictError("다른 참가자의 마일리지 잔액이 부족해 지금은 확정할 수 없습니다.");
+      }
+    }
+
+    // FR-20: 확정과 동시에 전원의 마일리지를 인당예상가격만큼 차감해 에스크로로 옮긴다.
+    const now = Timestamp.now();
+    tx.set(userRef, { ...user, mileageBalance: user.mileageBalance - pod.pricePerPerson, updatedAt: now });
+    otherUserSnapshots.forEach((snapshot, index) => {
+      const otherUser = snapshot.data() as UserDoc;
+      tx.set(otherUserRefs[index], {
+        ...otherUser,
+        mileageBalance: otherUser.mileageBalance - pod.pricePerPerson,
+        updatedAt: now,
+      });
+    });
+
+    const updatedPod: PodDoc = {
+      ...pod,
+      participants: updatedParticipants,
+      status: "confirmed",
+      escrowTotal: pod.pricePerPerson * updatedParticipants.length,
+      updatedAt: now,
+    };
+    tx.set(podRef, updatedPod);
+    return updatedPod;
   });
 }

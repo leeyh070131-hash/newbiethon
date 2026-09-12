@@ -4,7 +4,7 @@
 
 > 엔드포인트는 **예정** 목록이다. 실제 계약은 구현 시점에 `docs/api-contract.md`에 확정한다.
 
-**현재 단계: Phase 1-E (백엔드 완료, 프론트엔드 대기)**
+**현재 단계: Phase 1-F (백엔드 완료, 프론트엔드 대기)**
 
 의존순서: A → B → C → D → E → F → (G, H는 F 이후, 서로 병렬 가능)
 
@@ -43,11 +43,11 @@
 - 검증: AC-12 (프론트 완료 후 end-to-end 확인 가능)
 
 ## Phase 1-F. 확정 투표 & 에스크로
-- Backend: 최소인원 도달시 투표 오픈, 전원동의시 확정 (FR-18, FR-19), 잔액부족시 동의 차단 (FR-19a), 확정시 에스크로 차감 (FR-20), 대기상태 유지 (FR-21), 노쇼 환불 없음 정책 (FR-22)
-- Frontend: 투표 UI/현황 표시, 잔액부족 안내
-- 예정 API: `POST /api/pods/:id/vote`, `GET /api/pods/:id`(상태·투표 현황 포함)
-- 검증: AC-6, AC-7, AC-5b, AC-10
-- 의존: Phase 1-D, 1-E 완료 필요
+- Backend: ✅ 최소인원 도달시 투표 오픈, 전원동의시 확정 (FR-18, FR-19), 잔액부족시 동의 차단 (FR-19a), 확정시 에스크로 차감 (FR-20), 대기상태 유지 (FR-21), 노쇼 환불 없음 정책(별도 API 없음, FR-22) — `backend/services/pods.ts`의 `voteConfirm`
+- Frontend: ⬜ 투표 UI/현황 표시, 잔액부족 안내 — Codex 담당, 미착수
+- 예정 API: `POST /api/pods/:id/vote`, `GET /api/pods/:id`(상태·투표 현황 포함) (구현 완료, `docs/api-contract.md` 반영됨)
+- 검증: AC-6, AC-7, AC-5b, AC-10 (프론트 완료 후 end-to-end 확인 가능)
+- 의존: Phase 1-D, 1-E 완료 필요 (완료됨)
 
 ## Phase 1-G. 출발시간 임박 처리
 - Backend: 출발시간 도달 감지(Vercel Cron 등 스케줄러), 연장 동의 API, 전원동의시 30분 연장 / 미동의시 자동 폐지 (FR-23~FR-26)

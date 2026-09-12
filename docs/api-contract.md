@@ -248,3 +248,36 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 
 ### 비고
 - FR-17. `404`: 프로필 없음.
+
+## GET /api/pods/:id
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+
+### Response
+```json
+{ "pod": "POST /api/pods 응답의 pod와 동일한 형태 — 현재 상태/참가자별 투표 현황 포함" }
+```
+
+### 비고
+- 투표 현황 폴링(참가자 목록의 `votedConfirm`)에 사용. `404`: 팟이 없음.
+
+## POST /api/pods/:id/vote
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+본문 없음 (호출 = 본인의 확정 동의)
+
+### Response
+```json
+{ "pod": "동의 반영 후 pod 최신 상태. 전원이 동의했다면 status가 \"confirmed\"로 바뀌고 escrowTotal이 채워짐" }
+```
+
+### 비고
+- FR-18: 팟의 `participants.length`가 `minParticipants` 미만이면 아직 투표할 수 없다 (`409`).
+- FR-19a/AC-5b: 본인의 `mileageBalance`가 `pricePerPerson`보다 적으면 동의 자체가 `402 Payment Required`로 거부된다 — 이 응답을 받으면 프론트는 마일리지 충전 안내를 띄운다.
+- FR-19/FR-20/AC-6: 이 호출로 참가자 전원이 동의 상태가 되면, 그 자리에서 팟이 `confirmed`로 바뀌고 참가자 전원의 마일리지에서 `pricePerPerson`만큼 즉시 차감되어 `escrowTotal`에 반영된다(트랜잭션으로 원자 처리).
+- FR-21/AC-7: 아직 전원 동의가 아니면 `status`는 계속 `recruiting`으로 유지된다(투표 화면 계속 열려 있음).
+- `409`: 팟이 이미 `recruiting`이 아님, 또는 확정 처리 시점에 다른 참가자의 잔액이 부족해진 경우(드문 동시성 케이스).
+- `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟/본인 프로필 없음.
+- FR-22: 확정(`confirmed`) 이후 노쇼가 발생해도 이미 차감된 마일리지를 되돌리는 API는 없다(정책일 뿐, 별도 엔드포인트 없음).
