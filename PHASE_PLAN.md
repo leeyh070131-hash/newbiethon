@@ -44,8 +44,8 @@
 - 의존: Phase 1-F (완료)
 
 ## Phase 1-H. 팟 해지 & 정산 & 이력
-- Backend: ✅ `closePod`/`listHistory`/`listMyActivePods`
-- Frontend: ✅ 해지 버튼(호스트 전용), "내 팟" 탭(참여 중/이용 이력)
+- Backend: ✅ `voteClose`(2026-09-12부터 호스트 단독 → 참가자 전원 동의 방식으로 변경, FR-27 참고)/`listHistory`/`listMyActivePods`, 마일리지 사용 내역(`backend/services/mileage.ts`의 `recordMileageTransaction`/`listMileageTransactions`, FR-17a)
+- Frontend: ✅ 도착 확인 버튼(전원 동의 방식), "내 팟" 탭(참여 중/이용 이력), 마일리지 탭 사용 내역, 정산 완료 시 전원에게 알림(토스트, 폴링 기반), "함께 갈 팟" 새로고침 버튼
 - 의존: Phase 1-F (완료)
 
 ---

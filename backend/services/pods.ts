@@ -10,6 +10,7 @@ import {
 } from "../lib/http-errors";
 import { haversineDistanceMeters, type LatLng } from "../lib/geo";
 import { getProfile } from "./profile";
+import { recordMileageTransaction } from "./mileage";
 import { getStationById, getStationsByIds } from "./stations";
 import type { PodDoc } from "../models/pod";
 import type { UserDoc } from "../models/user";
@@ -20,6 +21,7 @@ export interface ClientPodParticipant {
   joinedAt: string;
   votedConfirm: boolean;
   votedExtend: boolean;
+  votedClose: boolean;
 }
 
 export interface ClientPod extends Omit<PodDoc, "participants" | "departureTime" | "createdAt" | "updatedAt"> {
@@ -53,6 +55,7 @@ export async function toClientPod(pod: PodDoc): Promise<ClientPod> {
       joinedAt: p.joinedAt.toDate().toISOString(),
       votedConfirm: p.votedConfirm,
       votedExtend: p.votedExtend,
+      votedClose: p.votedClose,
     })),
   };
 }
@@ -142,7 +145,7 @@ export async function createPod(hostUid: string, input: Record<string, unknown>)
     minParticipants: validated.minParticipants,
     pricePerPerson: validated.pricePerPerson,
     status: "recruiting",
-    participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false }],
+    participants: [{ uid: hostUid, joinedAt: now, votedConfirm: false, votedExtend: false, votedClose: false }],
     participantUids: [hostUid],
     escrowTotal: 0,
     awaitingExtension: false,
@@ -216,7 +219,10 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
 
     const updated: PodDoc = {
       ...pod,
-      participants: [...pod.participants, { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false }],
+      participants: [
+        ...pod.participants,
+        { uid, joinedAt: Timestamp.now(), votedConfirm: false, votedExtend: false, votedClose: false },
+      ],
       participantUids: [...pod.participantUids, uid],
       updatedAt: Timestamp.now(),
     };
@@ -225,30 +231,54 @@ export async function joinPod(uid: string, podId: string): Promise<PodDoc> {
   });
 }
 
-/** FR-27/FR-28/AC-11: 호스트가 확정된 팟을 해지하면 에스크로 전액이 호스트에게 지급된다. */
-export async function closePod(uid: string, podId: string): Promise<PodDoc> {
+/**
+ * FR-27/FR-28/AC-11: 도착(정산) 확인 투표. 2026-09-12부터 호스트 단독 결정이 아니라
+ * 참가자 전원의 동의가 필요하도록 바뀌었다 — voteConfirm/voteExtend와 같은 패턴이다.
+ * 호출한 본인의 동의만 기록하며, 전원이 동의하면 그 자리에서 팟을 해지하고
+ * 에스크로 전액을 호스트에게 지급한다.
+ */
+export async function voteClose(uid: string, podId: string): Promise<PodDoc> {
   const db = getAdminDb();
   const podRef = db.collection(COLLECTIONS.pods).doc(podId);
-  const hostUserRef = db.collection(COLLECTIONS.users).doc(uid);
 
   return db.runTransaction(async (tx) => {
-    const [podSnapshot, hostSnapshot] = await Promise.all([tx.get(podRef), tx.get(hostUserRef)]);
+    const podSnapshot = await tx.get(podRef);
     if (!podSnapshot.exists) throw new NotFoundError("팟을 찾을 수 없습니다.");
     const pod = podSnapshot.data() as PodDoc;
 
-    if (uid !== pod.hostUid) {
-      throw new ForbiddenError("호스트만 팟을 해지할 수 있습니다.");
-    }
     if (pod.status !== "confirmed") {
-      throw new ConflictError("확정된 팟만 해지할 수 있습니다.");
+      throw new ConflictError("확정된 팟만 도착 확인을 할 수 있습니다.");
     }
-    if (!hostSnapshot.exists) throw new NotFoundError("프로필이 아직 생성되지 않았습니다.");
+    if (!pod.participants.some((p) => p.uid === uid)) {
+      throw new ValidationError("이 팟의 참가자가 아닙니다.");
+    }
+
+    const updatedParticipants = pod.participants.map((p) => (p.uid === uid ? { ...p, votedClose: true } : p));
+    const allAgreed = updatedParticipants.every((p) => p.votedClose);
+    const now = Timestamp.now();
+
+    if (!allAgreed) {
+      const updated: PodDoc = { ...pod, participants: updatedParticipants, updatedAt: now };
+      tx.set(podRef, updated);
+      return updated;
+    }
+
+    // 전원 동의 — 에스크로 전액을 호스트에게 지급하고 해지한다.
+    const hostRef = db.collection(COLLECTIONS.users).doc(pod.hostUid);
+    const hostSnapshot = await tx.get(hostRef);
+    if (!hostSnapshot.exists) throw new NotFoundError("호스트 프로필을 찾을 수 없습니다.");
     const host = hostSnapshot.data() as UserDoc;
 
-    const now = Timestamp.now();
-    tx.set(hostUserRef, { ...host, mileageBalance: host.mileageBalance + pod.escrowTotal, updatedAt: now });
+    const hostNewBalance = host.mileageBalance + pod.escrowTotal;
+    tx.set(hostRef, { ...host, mileageBalance: hostNewBalance, updatedAt: now });
+    recordMileageTransaction(tx, pod.hostUid, {
+      type: "escrow_payout",
+      amount: pod.escrowTotal,
+      balanceAfter: hostNewBalance,
+      podId: pod.id,
+    });
 
-    const updatedPod: PodDoc = { ...pod, status: "closed", updatedAt: now };
+    const updatedPod: PodDoc = { ...pod, participants: updatedParticipants, status: "closed", updatedAt: now };
     tx.set(podRef, updatedPod);
     return updatedPod;
   });
@@ -387,13 +417,23 @@ export async function voteConfirm(uid: string, podId: string): Promise<PodDoc> {
 
     // FR-20: 확정과 동시에 전원의 마일리지를 인당예상가격만큼 차감해 에스크로로 옮긴다.
     const now = Timestamp.now();
-    tx.set(userRef, { ...user, mileageBalance: user.mileageBalance - pod.pricePerPerson, updatedAt: now });
+    const callerNewBalance = user.mileageBalance - pod.pricePerPerson;
+    tx.set(userRef, { ...user, mileageBalance: callerNewBalance, updatedAt: now });
+    recordMileageTransaction(tx, uid, {
+      type: "escrow_deduct",
+      amount: -pod.pricePerPerson,
+      balanceAfter: callerNewBalance,
+      podId: pod.id,
+    });
     otherUserSnapshots.forEach((snapshot, index) => {
       const otherUser = snapshot.data() as UserDoc;
-      tx.set(otherUserRefs[index], {
-        ...otherUser,
-        mileageBalance: otherUser.mileageBalance - pod.pricePerPerson,
-        updatedAt: now,
+      const otherNewBalance = otherUser.mileageBalance - pod.pricePerPerson;
+      tx.set(otherUserRefs[index], { ...otherUser, mileageBalance: otherNewBalance, updatedAt: now });
+      recordMileageTransaction(tx, otherUids[index], {
+        type: "escrow_deduct",
+        amount: -pod.pricePerPerson,
+        balanceAfter: otherNewBalance,
+        podId: pod.id,
       });
     });
 

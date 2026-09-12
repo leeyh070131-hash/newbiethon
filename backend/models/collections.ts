@@ -4,3 +4,8 @@ export const COLLECTIONS = {
   stations: "stations",
   pods: "pods",
 } as const;
+
+/** users/{uid} 아래의 마일리지 거래 내역 서브컬렉션 경로. */
+export function userMileageTransactionsPath(uid: string): string {
+  return `${COLLECTIONS.users}/${uid}/mileageTransactions`;
+}

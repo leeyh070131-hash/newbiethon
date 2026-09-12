@@ -4,18 +4,27 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { User as FirebaseUser } from "firebase/auth";
 import {
   ArrowDownUp, ArrowRight, Check, ChevronDown, ChevronRight, Clock3, Compass, CreditCard, History,
-  Leaf, LocateFixed, LogOut, MapPin, Moon, Plus, Search, ShieldCheck, Sparkles, Ticket, TrainFront,
-  Users, Wallet, X,
+  Leaf, LocateFixed, LogOut, MapPin, Moon, Plus, RefreshCw, Search, ShieldCheck, Sparkles, Ticket,
+  TrainFront, Users, Wallet, X,
 } from "lucide-react";
 import Modal from "./modal";
 import { firebaseConfigured, googleLogin, googleLogout, onAuthChange } from "@/frontend/lib/firebase";
 import {
-  ApiError, chargeMileage, closePod, createPod, createProfile, getHistory, getMyActivePods, getPod,
-  getProfile, getStations, joinPod, leavePod, listPods, redeemCoupon, updateProfile, voteConfirm, voteExtend,
+  ApiError, chargeMileage, createPod, createProfile, getHistory, getMileageTransactions, getMyActivePods,
+  getPod, getProfile, getStations, joinPod, leavePod, listPods, redeemCoupon, updateProfile, voteClose,
+  voteConfirm, voteExtend,
 } from "@/frontend/lib/api";
 import type { ClientPod } from "@/backend/services/pods";
 import type { ClientUser } from "@/backend/services/profile";
+import type { ClientMileageTransaction } from "@/backend/services/mileage";
 import type { StationDoc } from "@/backend/models/station";
+
+const transactionLabel: Record<ClientMileageTransaction["type"], string> = {
+  coupon: "쿠폰 충전",
+  charge: "계좌송금 충전",
+  escrow_deduct: "팟 확정 보관",
+  escrow_payout: "정산 지급",
+};
 
 type Tab = "explore" | "mine" | "wallet" | "profile";
 type Overlay = "login" | "profile" | "create" | "charge" | "guide" | "detail" | "extend" | null;
@@ -57,8 +66,11 @@ export default function TaxiApp() {
   const [pods, setPods] = useState<ClientPod[]>([]);
   const [myActivePods, setMyActivePods] = useState<ClientPod[]>([]);
   const [historyPods, setHistoryPods] = useState<ClientPod[]>([]);
+  const [mileageTransactions, setMileageTransactions] = useState<ClientMileageTransaction[]>([]);
   const [selected, setSelected] = useState<ClientPod | null>(null);
+  const [exploreRefreshing, setExploreRefreshing] = useState(false);
   const modalOpener = useRef<HTMLElement | null>(null);
+  const prevConfirmedIdsRef = useRef<Set<string> | null>(null);
 
   const [tab, setTab] = useState<Tab>("explore");
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -84,11 +96,28 @@ export default function TaxiApp() {
       setPods(await listPods());
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      setExploreRefreshing(false);
     }
   }, []);
   const refreshMine = useCallback(async () => {
     try {
       const [mine, history] = await Promise.all([getMyActivePods(), getHistory()]);
+
+      // 정산 완료 알림: 직전에 "확정" 상태였던 팟이 이번엔 목록에서 사라졌는데 이력에는
+      // "closed"로 있으면 그 사이 정산이 완료된 것이다. 로그인 직후 첫 호출(baseline)에는
+      // 과거 정산 건까지 알림이 뜨지 않도록 prevConfirmedIdsRef가 null일 때는 건너뛴다.
+      const newConfirmedIds = new Set(mine.filter((p) => p.status === "confirmed").map((p) => p.id));
+      if (prevConfirmedIdsRef.current) {
+        for (const id of prevConfirmedIdsRef.current) {
+          if (newConfirmedIds.has(id)) continue;
+          if (history.some((p) => p.id === id && p.status === "closed")) {
+            setNotice("정산이 완료된 팟이 있어요. 내 팟 > 이용 이력에서 확인하세요.");
+          }
+        }
+      }
+      prevConfirmedIdsRef.current = newConfirmedIds;
+
       setMyActivePods(mine);
       setHistoryPods(history);
     } catch (e) {
@@ -156,6 +185,21 @@ export default function TaxiApp() {
   useEffect(() => {
     if (tab === "mine" && authUser) refreshMine();
   }, [tab, authUser, refreshMine]);
+  // 정산 완료 알림은 "내 팟" 탭을 보고 있지 않아도 떠야 하므로, 로그인 중에는
+  // 탭과 무관하게 주기적으로 내 팟 상태를 확인한다.
+  useEffect(() => {
+    if (!authUser) {
+      prevConfirmedIdsRef.current = null;
+      return;
+    }
+    const timer = setInterval(refreshMine, 8000);
+    return () => clearInterval(timer);
+  }, [authUser, refreshMine]);
+  useEffect(() => {
+    if (tab === "wallet" && authUser) {
+      getMileageTransactions().then(setMileageTransactions).catch((e) => setError(errorMessage(e)));
+    }
+  }, [tab, authUser]);
   useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(""), 5000);
@@ -553,10 +597,23 @@ export default function TaxiApp() {
                     <h2>지금, 함께 갈 팟</h2>
                     <span className="count">{filteredPods.length}</span>
                   </div>
-                  <button className="primary small" onClick={() => requireUser("create")}>
-                    <Plus size={17} />
-                    팟 만들기
-                  </button>
+                  <div className="section-actions">
+                    <button
+                      className="icon-refresh"
+                      aria-label="목록 새로고침"
+                      disabled={exploreRefreshing}
+                      onClick={() => {
+                        setExploreRefreshing(true);
+                        refreshExplore();
+                      }}
+                    >
+                      <RefreshCw size={16} />
+                    </button>
+                    <button className="primary small" onClick={() => requireUser("create")}>
+                      <Plus size={17} />
+                      팟 만들기
+                    </button>
+                  </div>
                 </div>
                 <div className="filter-row">
                   <div className="chips" role="group" aria-label="참가 성별">
@@ -686,7 +743,7 @@ export default function TaxiApp() {
                     <i>3</i>
                     <p>
                       <strong>도착 후 깔끔하게 정산</strong>
-                      <span>호스트가 포인트 정산을 마쳐요</span>
+                      <span>전원이 도착을 확인하면 정산돼요</span>
                     </p>
                   </div>
                   <button className="text-link" onClick={() => open("guide")}>
@@ -775,11 +832,35 @@ export default function TaxiApp() {
               <div>
                 <h3>확정할 때 보관하고, 도착 후 정산해요</h3>
                 <p>
-                  전원이 동의하면 인당예상가격만큼 포인트를 보관해요. 이용 후 호스트가 정산하면 보관된 전액을 호스트에게
-                  지급해요. 확정 이후에는 불참해도 환불되지 않아요.
+                  전원이 동의하면 인당예상가격만큼 포인트를 보관해요. 참가자 전원이 도착을 확인하면 보관된 전액을
+                  호스트에게 지급해요. 확정 이후에는 불참해도 환불되지 않아요.
                 </p>
               </div>
             </div>
+            <h3 className="tx-heading">마일리지 사용 내역</h3>
+            {mileageTransactions.length ? (
+              <ul className="tx-items">
+                {mileageTransactions.map((t) => (
+                  <li key={t.id}>
+                    <span>{transactionLabel[t.type]}</span>
+                    <span className={t.amount >= 0 ? "tx-plus" : "tx-minus"}>
+                      {t.amount >= 0 ? "+" : ""}
+                      {money(t.amount)} P
+                    </span>
+                    <small>
+                      {new Date(t.createdAt).toLocaleString("ko-KR", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">아직 마일리지 사용 내역이 없어요.</p>
+            )}
           </section>
         )}
         {tab === "profile" && (
@@ -1068,8 +1149,11 @@ export default function TaxiApp() {
               <div className="info-panel">
                 <Wallet />
                 <div>
-                  <h3>4. 도착 후 호스트가 정산</h3>
-                  <p>확정 시 보관한 포인트 전액을 호스트에게 지급해요. 확정 후에는 탈퇴나 노쇼 환불이 불가능해요.</p>
+                  <h3>4. 도착 후 전원 확인하면 정산</h3>
+                  <p>
+                    참가자 전원이 도착을 확인하면 보관한 포인트 전액이 호스트에게 지급되고 모두에게 알림이 떠요. 확정
+                    후에는 탈퇴나 노쇼 환불이 불가능해요.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1106,24 +1190,27 @@ export default function TaxiApp() {
                 함께 가는 친구들 <span>{selected.participants.length}</span>
               </h3>
               <ul className="participants">
-                {selected.participants.map((m) => (
-                  <li key={m.uid}>
-                    <span className="avatar mini">{m.name.slice(0, 1)}</span>
-                    <span>
-                      {m.name}
-                      {m.uid === authUser?.uid ? " (나)" : ""}
-                      <small>{m.uid === selected.hostUid ? "호스트" : "참가자"}</small>
-                    </span>
-                    <span className={m.votedConfirm ? "vote-done" : "muted"}>
-                      {selected.status === "confirmed" || selected.status === "closed"
-                        ? "확정 동의 완료"
-                        : m.votedConfirm
-                        ? "확정 동의"
-                        : "대기 중"}
-                      {m.votedConfirm && <Check size={14} />}
-                    </span>
-                  </li>
-                ))}
+                {selected.participants.map((m) => {
+                  // 팟 단계별로 지금 의미 있는 투표가 다르다: 모집중=확정 동의, 확정=도착 확인, 종료=완료.
+                  const done =
+                    selected.status === "closed" ? true : selected.status === "confirmed" ? m.votedClose : m.votedConfirm;
+                  const label =
+                    selected.status === "closed" ? "정산 완료" : selected.status === "confirmed" ? (done ? "도착 확인" : "대기 중") : done ? "확정 동의" : "대기 중";
+                  return (
+                    <li key={m.uid}>
+                      <span className="avatar mini">{m.name.slice(0, 1)}</span>
+                      <span>
+                        {m.name}
+                        {m.uid === authUser?.uid ? " (나)" : ""}
+                        <small>{m.uid === selected.hostUid ? "호스트" : "참가자"}</small>
+                      </span>
+                      <span className={done ? "vote-done" : "muted"}>
+                        {label}
+                        {done && <Check size={14} />}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
 
               {selected.status === "recruiting" && selected.awaitingExtension && myMember ? (
@@ -1227,27 +1314,26 @@ export default function TaxiApp() {
                   {selected.hostUid === authUser?.uid ? "팟 폐지하고 나가기" : "팟에서 나가기"}
                 </button>
               )}
-              {selected.status === "confirmed" && (
+              {selected.status === "confirmed" && myMember && (
                 <div className="vote-panel">
                   <h3>
                     <ShieldCheck size={20} />
-                    출발이 확정되었어요!
+                    도착했나요?
                   </h3>
-                  <p>총 {money(selected.escrowTotal)} P를 보관 중이에요. 확정 후에는 불참해도 환불되지 않아요.</p>
-                  {selected.hostUid === authUser?.uid ? (
-                    <button
-                      className="primary full"
-                      disabled={busy}
-                      onClick={() => {
-                        if (window.confirm("모두 하차했나요? 보관된 포인트 전액을 호스트에게 지급하고 이용을 종료해요."))
-                          act(() => closePod(selected.id), "정산을 완료했어요. 내 팟의 이용 이력에서 확인하세요.");
-                      }}
-                    >
-                      도착 완료 · 정산하기
-                    </button>
-                  ) : (
-                    <p className="form-hint">도착 후 호스트가 정산하면 이용이 완료돼요.</p>
-                  )}
+                  <p>
+                    참가자 전원이 도착을 확인하면 보관된 {money(selected.escrowTotal)} P 전액이 호스트에게 지급되고
+                    이용이 종료돼요.
+                  </p>
+                  <strong>
+                    {selected.participants.filter((m) => m.votedClose).length}/{selected.participants.length}명 도착 확인
+                  </strong>
+                  <button
+                    className="primary full"
+                    disabled={busy || myMember.votedClose}
+                    onClick={() => act(() => voteClose(selected.id), "도착 확인이 반영되었어요.")}
+                  >
+                    {myMember.votedClose ? "확인 완료 · 친구들을 기다려요" : "도착 확인하기"}
+                  </button>
                 </div>
               )}
               {!active(selected) && (

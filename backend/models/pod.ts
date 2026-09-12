@@ -6,7 +6,7 @@ import type { Gender } from "./user";
  * recruiting: 모집 중 (확정 전)
  * confirmed: 전원 동의로 확정, 에스크로 보관 중 (FR-19~FR-22)
  * dissolved: 폐지 — 최소인원 미달 상태로 출발시간 임박 연장에 실패했거나(FR-25), 호스트가 확정 전 탈퇴(FR-13a)
- * closed: 해지 — 호스트가 택시 이용 완료 후 정산 (FR-27~FR-29)
+ * closed: 해지 — 참가자 전원이 도착 확인에 동의해 정산 완료 (FR-27~FR-29, 2026-09-12부터 호스트 단독 결정에서 전원 동의로 변경)
  */
 export type PodStatus = "recruiting" | "confirmed" | "dissolved" | "closed";
 
@@ -15,6 +15,7 @@ export interface PodParticipant {
   joinedAt: Timestamp;
   votedConfirm: boolean; // FR-18~FR-19: 확정 투표 동의 여부
   votedExtend: boolean; // FR-23~FR-24: 출발시간 임박 시 연장 동의 여부 (awaitingExtension이 true일 때만 의미 있음)
+  votedClose: boolean; // FR-27: 도착(정산) 확인 동의 여부 — 팟이 confirmed 상태일 때만 의미 있음
 }
 
 /**

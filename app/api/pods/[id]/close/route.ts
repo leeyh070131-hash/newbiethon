@@ -1,13 +1,13 @@
 // 얇은 라우팅 셸. 실제 로직은 backend/services/pods.ts 에 있다.
 import { requireAuth } from "@/backend/lib/auth";
 import { toErrorResponse } from "@/backend/lib/http-errors";
-import { closePod, toClientPod } from "@/backend/services/pods";
+import { toClientPod, voteClose } from "@/backend/services/pods";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { uid } = await requireAuth(request);
     const { id } = await params;
-    const pod = await closePod(uid, id);
+    const pod = await voteClose(uid, id);
     return Response.json({ pod: await toClientPod(pod) });
   } catch (error) {
     return toErrorResponse(error);

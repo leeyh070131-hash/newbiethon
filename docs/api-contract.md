@@ -138,7 +138,7 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
     "minParticipants": "number",
     "pricePerPerson": "number",
     "status": "\"recruiting\"",
-    "participants": [{ "uid": "string", "name": "string", "joinedAt": "string (ISO 8601)", "votedConfirm": "boolean", "votedExtend": "boolean" }],
+    "participants": [{ "uid": "string", "name": "string", "joinedAt": "string (ISO 8601)", "votedConfirm": "boolean", "votedExtend": "boolean", "votedClose": "boolean — FR-27 도착 확인 동의 여부, confirmed 상태일 때만 의미 있음" }],
     "participantUids": "string[] — participants의 uid만 뽑은 배열(내부 조회용, 프론트는 참고만)",
     "escrowTotal": "number — 생성 시 0",
     "awaitingExtension": "boolean — 생성 시 false",
@@ -267,6 +267,31 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 ### 비고
 - FR-17. `404`: 프로필 없음.
 
+## GET /api/mileage/transactions
+
+### Request
+헤더: `Authorization: Bearer <Firebase ID Token>`
+
+### Response
+```json
+{
+  "transactions": [
+    {
+      "id": "string",
+      "type": "\"coupon\" | \"charge\" | \"escrow_deduct\" | \"escrow_payout\"",
+      "amount": "number — 잔액 변화량. 차감(escrow_deduct)은 음수, 그 외는 양수",
+      "balanceAfter": "number — 이 거래 직후 잔액",
+      "podId": "string | null — escrow_deduct/escrow_payout일 때만 관련 팟 id",
+      "createdAt": "string (ISO 8601)"
+    }
+  ]
+}
+```
+
+### 비고
+- 마일리지 잔액이 바뀌는 모든 지점(쿠폰 충전 FR-15, 계좌송금 충전 FR-16, 팟 확정 시 에스크로 차감 FR-20, 팟 해지 시 정산 지급 FR-28)에서 잔액 변경과 같은 Firestore 트랜잭션 안에 함께 기록된다. 최신순(`createdAt` desc).
+- 저장 위치는 `users/{uid}/mileageTransactions` 서브컬렉션 — 본인 것만 조회 가능(경로 자체가 본인 uid로 스코프됨).
+
 ## GET /api/pods/:id
 
 ### Request
@@ -336,18 +361,22 @@ frontend/backend 사이의 API 요청/응답 형태를 정의하는 문서다. �
 
 ## POST /api/pods/:id/close
 
+> **2026-09-12 브레이킹 체인지**: 원래 "호스트만 즉시 해지" 방식이었으나, 참가자 전원이 도착을 확인해야 정산되는 방식으로 바뀌었다(FR-27 결정 변경, `PRD.md` 참고). 호출 = 본인의 도착 확인 동의이며, 즉시 해지가 아니다. `voteConfirm`/`voteExtend`와 같은 패턴.
+
 ### Request
 헤더: `Authorization: Bearer <Firebase ID Token>`
-본문 없음
+본문 없음 (호출 = 본인의 도착 확인 동의)
 
 ### Response
 ```json
-{ "pod": "해지 반영 후 pod. status가 \"closed\"" }
+{ "pod": "동의 반영 후 pod 최신 상태. 전원이 동의했다면 status가 \"closed\"로 바뀜" }
 ```
 
 ### 비고
-- FR-27/AC-11: 호스트만 호출 가능(`403` — 그 외엔 "호스트만 팟을 해지할 수 있습니다."). 팟이 `confirmed` 상태일 때만 해지 가능(`409`).
-- FR-28: 해지 즉시 `escrowTotal` 전액이 호스트의 `mileageBalance`에 지급된다.
+- 팟이 `confirmed` 상태일 때만 호출 가능(`409` — 그 외엔 "확정된 팟만 도착 확인을 할 수 있습니다.").
+- FR-27: 참가자 누구나(호스트 포함) 호출 가능. 전원이 동의하기 전까지는 `status`가 계속 `confirmed`로 유지되고 `participants[].votedClose`에 본인 동의만 반영된다.
+- FR-28: 전원이 동의하는 순간 그 자리에서 `escrowTotal` 전액이 호스트의 `mileageBalance`에 지급되고(`users/{hostUid}/mileageTransactions`에 `escrow_payout` 기록 추가) `status`가 `closed`로 바뀐다.
+- `400`: 본인이 이 팟의 참가자가 아님. `404`: 팟이 없음(전원 동의 처리 시 호스트 프로필이 없으면 404).
 - `404`: 팟이 없거나 호스트 본인 프로필이 없음.
 
 ## GET /api/history

@@ -2,6 +2,7 @@
 // 그대로 가져와(타입만 — 런타임 코드는 번들에 포함되지 않는다) 프론트/백엔드 타입이 어긋나지 않게 한다.
 import type { ClientPod } from "@/backend/services/pods";
 import type { ClientUser } from "@/backend/services/profile";
+import type { ClientMileageTransaction } from "@/backend/services/mileage";
 import type { StationDoc } from "@/backend/models/station";
 import { getIdToken } from "./firebase";
 
@@ -88,7 +89,8 @@ export async function voteExtend(id: string, agree: boolean): Promise<ClientPod>
     body: JSON.stringify({ agree }),
   })).pod;
 }
-export async function closePod(id: string): Promise<ClientPod> {
+/** FR-27: 도착(정산) 확인 동의. 참가자 전원이 동의해야 실제로 해지(정산)된다. */
+export async function voteClose(id: string): Promise<ClientPod> {
   return (await request<{ pod: ClientPod }>(`/api/pods/${id}/close`, { method: "POST" })).pod;
 }
 export async function getHistory(): Promise<ClientPod[]> {
@@ -112,4 +114,7 @@ export async function chargeMileage(amount: number): Promise<number> {
 }
 export async function getMileageBalance(): Promise<number> {
   return (await request<{ mileageBalance: number }>("/api/mileage/balance")).mileageBalance;
+}
+export async function getMileageTransactions(): Promise<ClientMileageTransaction[]> {
+  return (await request<{ transactions: ClientMileageTransaction[] }>("/api/mileage/transactions")).transactions;
 }
